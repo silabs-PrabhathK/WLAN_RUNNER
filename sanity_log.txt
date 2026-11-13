@@ -1,0 +1,28 @@
+[01-10-2026 15:09:42] ===== Script Started =====
+[01-10-2026 15:09:48] Selected Milestone Folder: M99
+[01-10-2026 15:09:48] Selected Git Branch: release/milestone99
+[01-10-2026 15:09:52] ===== Script Completed =====
+[01-10-2026 15:09:55] ===== Script Started =====
+[01-10-2026 15:09:57] Selected Milestone Folder: M99
+[01-10-2026 15:09:57] Selected Git Branch: release/milestone99
+[01-10-2026 15:10:03] ===== Script Completed =====
+[01-10-2026 15:26:07] ===== Script Started =====
+[01-10-2026 15:26:10] Selected Milestone Folder: M99
+[01-10-2026 15:26:10] Selected Git Branch: release/milestone99
+[01-10-2026 15:45:21] Executing: git fetch origin release/milestone99
+[01-10-2026 15:45:24] SUCCESS: git fetch origin release/milestone99
+[01-10-2026 15:45:24] Executing: git checkout release/milestone99
+[01-10-2026 15:45:26] SUCCESS: git checkout release/milestone99
+[01-10-2026 15:45:26] Executing: git submodule update --init --recursive
+[01-10-2026 15:45:33] SUCCESS: git submodule update --init --recursive
+[01-10-2026 15:45:33] Executing: python -m venv venv
+[01-10-2026 15:45:39] SUCCESS: python -m venv venv
+[01-10-2026 15:45:39] Executing: workspace_setup.bat
+[01-10-2026 15:47:47] SUCCESS: workspace_setup.bat
+[01-10-2026 15:47:47] M99 setup completed successfully
+[01-10-2026 15:47:47] Working Milestone Path: C:\Regression\M99
+[01-10-2026 15:47:47] ===== Script Completed =====
+[04-10-2026 03:04:31] ===== Script Started =====
+[04-10-2026 03:04:33] Selected Milestone Folder: M99
+[04-10-2026 03:04:33] Selected Git Branch: release/milestone99
+[04-10-2026 03:04:40] ===== Script Completed =====
