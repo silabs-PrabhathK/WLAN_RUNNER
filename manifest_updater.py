@@ -445,7 +445,7 @@ def create_manifest(milestone):
     ):
         print("\n❌ Manifest Not Found")
         print(manifest_file)
-        return
+        return False
     with open(
         manifest_file,
         "r",
@@ -509,6 +509,7 @@ def create_manifest(milestone):
         f"{os.path.basename(without_fw_manifest)}"
     )
     print("\n✅ Manifest Update Completed")
+    return True
 
 def create_paho_manifest(
     standard_manifest,
@@ -594,7 +595,8 @@ def main():
         product
     )
 
-    create_manifest(milestone)
+    if not create_manifest(milestone):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

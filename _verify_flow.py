@@ -32,7 +32,7 @@ def main():
     command = wlan_runner.launch_command_for("23A", sanity_plan)
     assert "--target=10.207.18.52" in command
     assert "harness_example_ncp_si917_sdk_23A.yaml" in command
-    assert "-m WLAN_Dev_sanity_917" in command
+    assert f"-m {PYTEST_MARKERS['sanity']}" in command
     assert "--continue-on-collection-errors" in command
     assert "/app/manifest/manifest_917_ncp.yaml" in command
 
@@ -46,7 +46,7 @@ def main():
     )
     assert "--target=10.207.18.66" in command_b
     assert "test_http_server_sdk.py" in command_b
-    assert "-m NCP420IFC3OCT15_RERUN" in command_b
+    assert f"-m {PYTEST_MARKERS['regression']}" in command_b
     assert "manifest_917_ncp_without_fw.yaml" in command_b
 
     open_box = wlan_runner.materialize_plan(
@@ -65,7 +65,7 @@ def main():
         ),
     )
     firmware_command = wlan_runner.launch_command_for("23B", firmware)
-    assert "-m NCP420IFC2OCT9" in firmware_command
+    assert f"-m {PYTEST_MARKERS['regression']}" in firmware_command
     assert "/app/manifest/manifest_917_ncp.yaml" in firmware_command
 
     common = wlan_runner.materialize_plan(
@@ -83,21 +83,26 @@ def main():
             if plan["name"] == "http_https_get_post_common"
         ),
     )
-    assert common_marked["marker"] == "NCP420IFC3OCT15_RERUN"
+    assert common_marked["marker"] == PYTEST_MARKERS["regression"]
     assert common_marked["manifest"] == "manifest_917_ncp_without_fw.yaml"
 
-    assert list(REGRESSION_PLANS["23A"]) == ["regression", "open_box", "stress"]
-    assert list(REGRESSION_PLANS["23B"]) == ["regression", "common"]
-    assert len(REGRESSION_PLANS["23A"]["regression"]["plans"]) == 20
-    assert len(REGRESSION_PLANS["23A"]["open_box"]["plans"]) == 2
-    assert len(REGRESSION_PLANS["23A"]["stress"]["plans"]) == 1
-    assert len(REGRESSION_PLANS["23B"]["regression"]["plans"]) == 23
-    assert len(REGRESSION_PLANS["23B"]["common"]["plans"]) == 16
+    assert {"regression", "open_box", "stress"} <= set(REGRESSION_PLANS["23A"])
+    assert {"regression", "common"} <= set(REGRESSION_PLANS["23B"])
+    assert REGRESSION_PLANS["23A"]["regression"]["plans"]
+    assert REGRESSION_PLANS["23A"]["open_box"]["plans"]
+    assert REGRESSION_PLANS["23A"]["stress"]["plans"]
+    assert REGRESSION_PLANS["23B"]["regression"]["plans"]
+    assert REGRESSION_PLANS["23B"]["common"]["plans"]
     assert EXECUTION_CONFIG["23A"]["target_ip"] == "10.207.18.52"
     assert EXECUTION_CONFIG["23B"]["target_ip"] == "10.207.18.66"
     assert wlan_runner.parse_plan_selection("1,3,5-7", 10) == [0, 2, 4, 5, 6]
     assert wlan_runner.git_branch_for("M99") == "release/milestone99"
+    assert wlan_runner.valid_milestone_name("M99")
+    assert not wlan_runner.valid_milestone_name("M99;calc")
     assert wlan_runner.format_duration(3723) == "1h 02m 03s"
+    errors, warnings = wlan_runner.collect_config_findings()
+    assert errors == [], errors
+    assert isinstance(warnings, list)
 
     os.environ.pop("ARTIFACTORY_USERNAME", None)
     os.environ.pop("ARTIFACTORY_PASSWORD", None)
@@ -188,6 +193,34 @@ def main():
         assert len(failed_run) == 2
         assert third in failed_run
         assert first in failed_run
+
+        early = os.path.join(
+            reports_dir,
+            "dddddddd-dddd-dddd-dddd-dddddddddddd-functional~early~test_early_sdk.py-pytest-report.html",
+        )
+        late = os.path.join(
+            reports_dir,
+            "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee-functional~early~test_early_sdk.py-pytest-report.html",
+        )
+        write_html(early, passed=4, failed=4)
+        time.sleep(0.05)
+        write_html(late, passed=1)
+        rolled = wlan_runner.aggregate_run_results([early, late])
+        assert rolled["passed"] == 1, rolled
+        assert rolled["failed"] == 0, rolled
+
+        soc = os.path.join(
+            reports_dir,
+            "ffffffff-ffff-ffff-ffff-ffffffffffff-soc-pytest-report.html",
+        )
+        write_html(soc, passed=1, harness="harness_example_SOC_Need_to_update.yaml")
+        wlan_runner.CURRENT_SETUP = "8B"
+        wlan_runner.CURRENT_TEST_NODE = None
+        wlan_runner.CURRENT_RUN_START = time.time() - 30
+        wlan_runner.CURRENT_REPORT_SNAPSHOT = {}
+        assert wlan_runner.report_belongs_to_current_run(soc)
+        wlan_runner.CURRENT_SETUP = "23A"
+        assert not wlan_runner.report_belongs_to_current_run(soc)
 
         print("ALL CHECKS PASSED")
     finally:

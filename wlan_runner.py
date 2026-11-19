@@ -32,6 +32,8 @@ from sanity_config import (
     UTF_CORE_CONFIG,
     WORKSPACE_ROOT,
     RESOURCE_LAYOUT,
+    HARNESS_PRECONDITIONS,
+    EMAIL_SETTINGS,
 )
 from test_mail import (
     counts_from_reports,
@@ -83,19 +85,40 @@ ANSI = {
     "white": "\033[97m",
 }
 
+def raspberry_pi_target():
+    """Host and login for the optional Pi reboot.
+
+    A setup may set pi_ip, pi_user, pi_password, and pi_reboot_wait.
+    Otherwise the target IP is used, and this PC's wlan_runner.local.env
+    can override the login with RASPI_USERNAME and RASPI_PASSWORD.
+    """
+    setup_config = EXECUTION_CONFIG.get(CURRENT_SETUP) or {}
+    host = str(setup_config.get("pi_ip") or setup_config.get("target_ip") or "").strip()
+    username = os.environ.get("RASPI_USERNAME", "").strip() or str(setup_config.get("pi_user") or "pi")
+    password = os.environ.get("RASPI_PASSWORD", "").strip() or str(setup_config.get("pi_password") or "raspberry")
+    try:
+        wait_seconds = int(os.environ.get("RASPI_REBOOT_WAIT", setup_config.get("pi_reboot_wait", 30)))
+    except (TypeError, ValueError):
+        wait_seconds = 30
+    if wait_seconds < 0:
+        wait_seconds = 30
+    return host, username, password, wait_seconds
+
+
 def reboot_raspberry_pi():
     import paramiko
-    pi_ip = EXECUTION_CONFIG[CURRENT_SETUP]["target_ip"]
-    if not pi_ip:
+    host, username, password, _wait_seconds = raspberry_pi_target()
+    if not host:
         say(
             f"  Raspberry Pi IP not configured for {CURRENT_SETUP}",
             "yellow",
             log=True
         )
-        return
+        return False
+    ssh = None
     try:
         say(
-            f"  Connecting to Raspberry Pi : {pi_ip}",
+            f"  Connecting to Raspberry Pi : {host} as {username}",
             "cyan",
             log=True
         )
@@ -104,26 +127,32 @@ def reboot_raspberry_pi():
             paramiko.AutoAddPolicy()
         )
         ssh.connect(
-            hostname=pi_ip,
-            username="pi",
-            password="raspberry",
-            timeout=20
+            hostname=host,
+            username=username,
+            password=password,
+            timeout=20,
+            banner_timeout=20,
         )
-        ssh.exec_command(
-            "sudo reboot"
-        )
-        ssh.close()
+        ssh.exec_command("sudo reboot")
         say(
-            f"  Reboot triggered : {pi_ip}",
+            f"  Reboot triggered : {host}",
             "green",
             log=True
         )
+        return True
     except Exception as error:
         say(
             f"  Raspberry Pi reboot failed : {error}",
             "red",
             log=True
         )
+        return False
+    finally:
+        if ssh is not None:
+            try:
+                ssh.close()
+            except Exception:
+                pass
 
 
 def get_resource_root():
@@ -331,14 +360,32 @@ def verify_dependencies():
         "ruamel": "ruamel.yaml",
         "paramiko": "paramiko",
     }
+    missing = []
     for module, pip_name in package_map.items():
         try:
             __import__(module)
             say(f"  {pip_name} ready", "green")
         except ImportError:
-            say(f"  Installing {pip_name}...", "yellow", log=True)
-            subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
-            write_log(f"Installed {pip_name}")
+            missing.append(pip_name)
+    if not missing:
+        return True
+    say("  Installing " + ", ".join(missing), "yellow", log=True)
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+    except subprocess.CalledProcessError as error:
+        say(f"  pip install failed ({error.returncode}).", "red", log=True)
+        say("  Run: pip install -r requirements.txt", "yellow")
+        return False
+    for pip_name in missing:
+        write_log(f"Installed {pip_name}")
+    return True
+
+
+_MILESTONE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+
+
+def valid_milestone_name(name):
+    return bool(_MILESTONE_NAME.fullmatch((name or "").strip()))
 
 
 def git_milestone_name(milestone):
@@ -492,6 +539,9 @@ def clone_milestone(milestone):
     milestone_path = os.path.join(WORKSPACE, milestone)
     wifi_path = utf_wifi_path(milestone)
     branch = git_branch_for(milestone)
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", branch or ""):
+        say(f"  Branch name is not safe to run: {branch}", "red", log=True)
+        return None
     os.makedirs(milestone_path, exist_ok=True)
     if not os.path.isdir(wifi_path):
         section("Clone")
@@ -562,6 +612,9 @@ def select_milestone():
     name = prompt("  New milestone folder (example: M99): ")
     if not name:
         return None
+    if not valid_milestone_name(name):
+        say("  Use letters, numbers, dots, underscores, or hyphens only.", "yellow", log=True)
+        return None
     CURRENT_MILESTONE = name
     branch = git_branch_for(name)
     write_log(f"Selected milestone: {name}")
@@ -580,14 +633,120 @@ def select_milestone():
 
 
 def setup_validation():
-    if not BUILD_CONFIG:
-        say("  BUILD_CONFIG is empty. Update sanity_config.py.", "red", log=True)
-        return False
-    if not EXECUTION_CONFIG:
-        say("  EXECUTION_CONFIG is empty. Update sanity_config.py.", "red", log=True)
+    errors, _warnings = collect_config_findings()
+    if errors:
+        for item in errors:
+            say(f"  {item}", "red", log=True)
         return False
     write_log("Setup validation successful")
     return True
+
+
+def _config_file_name(value):
+    return os.path.basename(str(value or "").replace("\\", "/").strip())
+
+
+def collect_config_findings():
+    """Return (errors, warnings) for the lab config on this PC."""
+    errors = []
+    warnings = []
+    if not EXECUTION_CONFIG:
+        errors.append("EXECUTION_CONFIG is empty.")
+    if not BUILD_CONFIG:
+        errors.append("BUILD_CONFIG is empty.")
+    if not PRODUCT_SETUPS:
+        errors.append("PRODUCT_SETUPS is empty.")
+
+    known = set(EXECUTION_CONFIG)
+    placeholder = []
+    missing_preconditions = []
+    missing_plans = []
+    for product, setups in PRODUCT_SETUPS.items():
+        if product not in RESOURCE_LAYOUT:
+            warnings.append(f"{product} has no folder in RESOURCE_LAYOUT.")
+        for setup in setups:
+            if setup not in known:
+                errors.append(f"{product} setup {setup} is missing from EXECUTION_CONFIG.")
+                continue
+            target = str(EXECUTION_CONFIG[setup].get("target_ip") or "").strip()
+            harness = str(EXECUTION_CONFIG[setup].get("harness") or "").strip()
+            if not target:
+                errors.append(f"{setup} has no target_ip.")
+            if not harness:
+                errors.append(f"{setup} has no harness file name.")
+            elif "need_to_update" in harness.lower():
+                placeholder.append(setup)
+            if setup not in HARNESS_PRECONDITIONS:
+                missing_preconditions.append(setup)
+            if setup not in REGRESSION_PLANS:
+                missing_plans.append(setup)
+    if placeholder:
+        warnings.append("Harness file still needs a real name for: " + ", ".join(placeholder))
+    if missing_preconditions:
+        warnings.append("No HARNESS_PRECONDITIONS for: " + ", ".join(missing_preconditions))
+    if missing_plans:
+        warnings.append("No regression categories for: " + ", ".join(missing_plans))
+
+    for setup, categories in REGRESSION_PLANS.items():
+        if setup not in known:
+            errors.append(f"REGRESSION_PLANS refers to unknown setup {setup}.")
+            continue
+        if not isinstance(categories, dict):
+            errors.append(f"Regression plans for {setup} are not grouped by category.")
+            continue
+        for key, category in categories.items():
+            plans = (category or {}).get("plans") or []
+            if not plans:
+                warnings.append(f"{setup} / {key} has no plans.")
+            seen = set()
+            for plan in plans:
+                name = (plan or {}).get("name")
+                path = (plan or {}).get("path")
+                if not name or not path:
+                    errors.append(f"{setup} / {key} has a plan without a name or path.")
+                    continue
+                if name in seen:
+                    warnings.append(f"{setup} / {key} lists {name} more than once.")
+                seen.add(name)
+
+    if not str(CONNECTIVITY_CONFIG.get("path") or "").strip():
+        errors.append("CONNECTIVITY_CONFIG path is empty.")
+    if not str(SANITY_CONFIG.get("path") or "").strip():
+        errors.append("SANITY_CONFIG path is empty.")
+
+    latest = _config_file_name(BUILD_CONFIG.get("rps_filename"))
+    previous = _config_file_name(BUILD_CONFIG.get("http_url"))
+    details = _config_file_name(BUILD_DETAILS.get("firmware"))
+    if latest and details and latest != details:
+        warnings.append(
+            f"BUILD_DETAILS firmware is {details}, while the latest firmware in BUILD_CONFIG is {latest}."
+        )
+    for firmware in (latest, previous):
+        if not firmware:
+            continue
+        missing_roots = [
+            folder_name
+            for folder_name in RESOURCE_LAYOUT.values()
+            if not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware))
+        ]
+        if missing_roots:
+            located = ", ".join(f"Resources\\{name}" for name in missing_roots)
+            warnings.append(f"{firmware} is missing from {located}")
+
+    if not [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]:
+        warnings.append("EMAIL_SETTINGS has no To recipients, so result mail cannot be sent.")
+    username, password = artifactory_credentials()
+    if not username or not password:
+        warnings.append("Artifactory username or password is missing. Add them to wlan_runner.local.env.")
+    return errors, warnings
+
+
+def note_setup_warnings(setup):
+    harness = str(EXECUTION_CONFIG.get(setup, {}).get("harness") or "")
+    if "need_to_update" in harness.lower():
+        say(f"  {setup} harness is still a placeholder: {harness}", "yellow", log=True)
+    if setup not in HARNESS_PRECONDITIONS:
+        say(f"  {setup} has no harness preconditions in sanity_config.py.", "yellow", log=True)
 
 
 def available_products():
@@ -626,6 +785,7 @@ def select_product_and_setup():
         return None, None
     setup = setups[int(setup_choice) - 1]
     write_log(f"Product: {product}  Setup: {setup}")
+    note_setup_warnings(setup)
     return product, setup
 
 
@@ -864,20 +1024,26 @@ def report_belongs_to_current_run(report_file):
 
     expected_harness = ""
     if CURRENT_SETUP in EXECUTION_CONFIG:
-        expected_harness = EXECUTION_CONFIG[CURRENT_SETUP].get("harness", "").lower()
+        expected_harness = os.path.basename(
+            str(EXECUTION_CONFIG[CURRENT_SETUP].get("harness", ""))
+        ).lower()
     setup_token = str(CURRENT_SETUP or "").lower()
-    if expected_harness or setup_token:
-        try:
-            content = _read_text(report_file)
-        except OSError:
-            return False
-        harness_match = re.search(r"harness[^\"'<>\s]+\.ya?ml", content, re.IGNORECASE)
-        if harness_match:
-            harness_name = harness_match.group(0).lower()
-            if expected_harness and expected_harness not in harness_name:
-                return False
-            if setup_token and setup_token not in harness_name and f"sdk_{setup_token}" not in harness_name:
-                return False
+    if not expected_harness and not setup_token:
+        return True
+    try:
+        content = _read_text(report_file)
+    except OSError:
+        return False
+    harness_match = re.search(r"harness[^\"'<>\s]+\.ya?ml", content, re.IGNORECASE)
+    if not harness_match:
+        return True
+    found = harness_match.group(0).lower()
+    if expected_harness and expected_harness in found:
+        return True
+    if setup_token and (setup_token in found or f"sdk_{setup_token}" in found):
+        return True
+    if expected_harness:
+        return False
     return True
 
 
@@ -957,18 +1123,8 @@ def aggregate_run_results(report_files):
             "errors": errors,
         }
         previous = latest.get(identity)
-        if previous is None:
+        if previous is None or mtime >= previous["mtime"]:
             latest[identity] = current
-        else:
-            latest[identity] = {
-                "identity": identity,
-                "name": current["name"],
-                "path": current["path"],
-                "mtime": current["mtime"],
-                "passed": previous["passed"] + current["passed"],
-                "failed": current["failed"],
-                "errors": current["errors"],
-            }
 
     rows = []
     for identity in sorted(latest):
@@ -1158,7 +1314,8 @@ def publish_campaign(destination, report_files, executed):
     if regression:
         apply_executed_plans(summary, executed)
     enrich_summary(summary, report_files)
-    attachments = select_mail_attachments(report_files)
+    # Regression mail is the plan table only. Connectivity and Sanity attach HTML.
+    attachments = [] if regression else select_mail_attachments(report_files)
     if regression:
         write_log("Mail counts: latest result of each plan")
     elif attachments:
@@ -1201,20 +1358,12 @@ def publish_campaign(destination, report_files, executed):
         say("No pytest HTML report was found to mail.","red",log=True,)
         return summary
     try:
-        if regression:
-            send_latest_report(
-                [],
-                runtime=summary["runtime"],
-                test_type=CURRENT_TEST_TYPE or "WLAN",
-                headline=summary,
-            )
-        else:
-            send_latest_report(
-                attachments,
-                runtime=summary["runtime"],
-                test_type=CURRENT_TEST_TYPE or "WLAN",
-                headline=summary,
-            )
+        send_latest_report(
+            attachments,
+            runtime=summary["runtime"],
+            test_type=CURRENT_TEST_TYPE or "WLAN",
+            headline=summary,
+        )
     except Exception as error:
         say(f"  Mail was not sent: {error}", "red", log=True)
         say(f"  Reports are saved in {destination}", "yellow", log=True)
@@ -1266,17 +1415,27 @@ def update_settings_defaults(milestone):
         return
     with open(settings_file, "r", encoding="utf-8") as handle:
         lines = handle.readlines()
+    replacements = {
+        "SDK_BUILD_NUM": ARTIFACTORY_CONFIG["sdk_build_num"],
+        "ARTIFACTORY_URL_TO_UPLOAD_REPORTS": ARTIFACTORY_CONFIG["artifactory_url"],
+        "ARTIFACTORY_USERNAME": artifactory_setting("username", "ARTIFACTORY_USERNAME"),
+        "ARTIFACTORY_PASSWORD": artifactory_setting("password", "ARTIFACTORY_PASSWORD"),
+    }
     updated = []
+    seen = set()
     for line in lines:
-        if line.startswith("SDK_BUILD_NUM="):
-            line = f"SDK_BUILD_NUM={ARTIFACTORY_CONFIG['sdk_build_num']}\n"
-        elif line.startswith("ARTIFACTORY_URL_TO_UPLOAD_REPORTS="):
-            line = f"ARTIFACTORY_URL_TO_UPLOAD_REPORTS={ARTIFACTORY_CONFIG['artifactory_url']}\n"
-        elif line.startswith("ARTIFACTORY_USERNAME="):
-            line = f"ARTIFACTORY_USERNAME={artifactory_setting('username', 'ARTIFACTORY_USERNAME')}\n"
-        elif line.startswith("ARTIFACTORY_PASSWORD="):
-            line = f"ARTIFACTORY_PASSWORD={artifactory_setting('password', 'ARTIFACTORY_PASSWORD')}\n"
-        updated.append(line)
+        replaced = False
+        for key, value in replacements.items():
+            if line.startswith(f"{key}="):
+                updated.append(f"{key}={value}\n")
+                seen.add(key)
+                replaced = True
+                break
+        if not replaced:
+            updated.append(line if line.endswith("\n") else line + "\n")
+    for key, value in replacements.items():
+        if key not in seen:
+            updated.append(f"{key}={value}\n")
     with open(settings_file, "w", encoding="utf-8", newline="\n") as handle:
         handle.writelines(updated)
     write_log("settings_defaults.env updated")
@@ -1408,13 +1567,14 @@ def ask_pi_reboot():
         allow_quit=False
     )
     if choice == "1":
-        reboot_raspberry_pi()
-        say(
-            "  Waiting 30 seconds for reboot...",
-            "yellow",
-            log=True
-        )
-        time.sleep(30)
+        if reboot_raspberry_pi():
+            _host, _username, _password, wait_seconds = raspberry_pi_target()
+            say(
+                f"  Waiting {wait_seconds} seconds for reboot...",
+                "yellow",
+                log=True
+            )
+            time.sleep(wait_seconds)
 
 def prepare_execution_environment():
     global ENV_READY_KEY
@@ -1786,19 +1946,42 @@ def send_failure_mail(title, message):
             f"Failure mail could not be sent: {mail_error}"
         )
 
+def show_config_findings(errors, warnings):
+    for item in warnings:
+        say(f"  {item}", "yellow", log=True)
+    for item in errors:
+        say(f"  {item}", "red", log=True)
+
+
 def main():
     global WORKSPACE
     global SCRIPT_STARTED_AT
     enable_console()
     SCRIPT_STARTED_AT = time.time()
     banner()
+    checking = "--check" in sys.argv[1:]
+    if checking:
+        load_local_env()
+        errors, warnings = collect_config_findings()
+        show_config_findings(errors, warnings)
+        if errors:
+            say(f"  {len(errors)} configuration error(s).", "red")
+            raise SystemExit(1)
+        say("  Configuration check finished.", "green")
+        return
     started = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
     say(f"  Started {started}", "dim", log=True)
     write_log("===== WLAN Runner started =====")
     try:
-        verify_dependencies()
+        if not verify_dependencies():
+            return
         create_project_folders()
         load_local_env()
+        errors, warnings = collect_config_findings()
+        show_config_findings(errors, warnings)
+        if errors:
+            say("  Fix sanity_config.py, then start again.", "red", log=True)
+            return
         WORKSPACE = resolve_workspace()
         say(f"  Workspace: {WORKSPACE}", "dim", log=True)
         if select_milestone():
@@ -1806,10 +1989,7 @@ def main():
         else:
             say("  No milestone selected.", "yellow", log=True)
     except KeyboardInterrupt:
-        send_failure_mail(
-            "Keyboard Interrupt",
-            "Execution stopped manually by user."
-        )
+        write_log("Stopped by user")
         say(
             "\n  Stopped.",
             "yellow",

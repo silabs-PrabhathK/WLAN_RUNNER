@@ -5,7 +5,7 @@ import sys
 
 from ruamel.yaml import YAML
 
-from sanity_config import HARNESS_PRECONDITIONS
+from sanity_config import EXECUTION_CONFIG, HARNESS_PRECONDITIONS
 
 
 class YAMLNull:
@@ -75,15 +75,28 @@ RESOURCES_FOLDER = os.path.join(
 )
 
 
-def get_previous_milestone(current_milestone):
-
-    number = int(
-        "".join(
-            filter(str.isdigit, current_milestone)
-        )
+def harness_file_name(setup):
+    configured = os.path.basename(
+        str((EXECUTION_CONFIG.get(setup) or {}).get("harness") or "").strip()
     )
+    if configured:
+        return configured
+    return f"harness_example_ncp_si917_sdk_{setup}.yaml"
 
-    return f"M{number - 1}"
+
+def get_previous_milestone(current_milestone):
+    """Return the previous folder name, keeping the same prefix.
+
+    M99 becomes M98. Milestone100 becomes Milestone99.
+    """
+    text = str(current_milestone or "")
+    match = re.search(r"(\d+)", text)
+    if not match:
+        return None
+    number = int(match.group(1))
+    if number <= 0:
+        return None
+    return text[: match.start(1)] + str(number - 1) + text[match.end(1) :]
 
 
 def load_yaml_text(text):
@@ -699,7 +712,8 @@ def apply_preconditions_to_text(text, setup):
     return _join_like(text, lines), applied
 
 def create_setup_harness(milestone, setup):
-
+    harness_name = harness_file_name(setup)
+    legacy_name = f"harness_example_ncp_si917_sdk_{setup}.yaml"
     previous_milestone = get_previous_milestone(milestone)
 
     current_harness_folder = os.path.join(
@@ -709,97 +723,85 @@ def create_setup_harness(milestone, setup):
         "config",
         "harnesses",
     )
-
-    previous_harness_folder = os.path.join(
-        REGRESSION_ROOT,
-        previous_milestone,
-        "utf_wifi",
-        "config",
-        "harnesses",
-    )
-
     default_harness = os.path.join(
         current_harness_folder,
         "harness_example_ncp_si917_sdk.yaml",
-    )
-
-    previous_harness = os.path.join(
-        previous_harness_folder,
-        f"harness_example_ncp_si917_sdk_{setup}.yaml",
-    )
-
-    resource_harness = os.path.join(
-        RESOURCES_FOLDER,
-        f"harness_example_ncp_si917_sdk_{setup}.yaml"
     )
 
     print("\n====================================")
     print(f"Processing Setup : {setup}")
     print("====================================")
 
-    if os.path.exists(previous_harness):
-        source_harness = previous_harness
-        print(f"\n✅ Found Previous Harness : "
-            f"{os.path.basename(previous_harness)}")
-        print(f"Source : {previous_milestone}")
-    elif os.path.exists(resource_harness):
-        source_harness = resource_harness
-        print("\n⚠ Previous Harness Missing")
-        print(
-            f"Using Resource Harness : "
-            f"{os.path.basename(resource_harness)}"
+    if not os.path.isdir(current_harness_folder):
+        print(f"\nHarness folder missing: {current_harness_folder}")
+        return False
+
+    candidates = []
+    if previous_milestone:
+        previous_folder = os.path.join(
+            REGRESSION_ROOT,
+            previous_milestone,
+            "utf_wifi",
+            "config",
+            "harnesses",
         )
-    else:
-        print("\n❌ Previous Harness Missing")
-        print("❌ Resource Harness Missing")
-        print("❌ Cannot continue.")
-        return
+        candidates.append((os.path.join(previous_folder, harness_name), previous_milestone))
+        if legacy_name != harness_name:
+            candidates.append((os.path.join(previous_folder, legacy_name), previous_milestone))
+    candidates.append((os.path.join(RESOURCES_FOLDER, harness_name), "Resources"))
+    if legacy_name != harness_name:
+        candidates.append((os.path.join(RESOURCES_FOLDER, legacy_name), "Resources"))
 
-    with open(default_harness, "r", encoding="utf-8") as handle:
-        default_text = handle.read()
+    source_harness = None
+    source_label = ""
+    for path, label in candidates:
+        if os.path.isfile(path):
+            source_harness = path
+            source_label = label
+            break
 
+    if not source_harness:
+        print("\nNo previous harness or resource harness was found.")
+        print(f"Looked for {harness_name}")
+        return False
+
+    print(f"\nSource harness: {os.path.basename(source_harness)} ({source_label})")
     with open(source_harness, "r", encoding="utf-8") as handle:
         source_text = handle.read()
 
-    source_yaml = load_yaml_text(source_text)
-    default_yaml = load_yaml_text(default_text)
+    if os.path.isfile(default_harness):
+        with open(default_harness, "r", encoding="utf-8") as handle:
+            default_text = handle.read()
+        output_text, missing_keys_added = insert_missing_default_keys(
+            source_text,
+            load_yaml_text(source_text),
+            default_text,
+            load_yaml_text(default_text),
+        )
+    else:
+        print(f"Default harness not found. Copying the source harness: {default_harness}")
+        output_text = source_text
+        missing_keys_added = 0
 
-    output_text, missing_keys_added = insert_missing_default_keys(
-        source_text,
-        source_yaml,
-        default_text,
-        default_yaml,
-    )
     output_text, override_count = apply_preconditions_to_text(
         output_text,
         setup,
     )
 
-    output_file = os.path.join(
-        current_harness_folder,
-        f"harness_example_ncp_si917_sdk_{setup}.yaml",
-    )
-
+    output_file = os.path.join(current_harness_folder, harness_name)
     with open(output_file, "w", encoding="utf-8", newline="") as handle:
         handle.write(output_text)
-    if os.path.exists(output_file):
-        print("\n✅ Verification Passed")
 
-        resource_output = os.path.join(RESOURCES_FOLDER, f"harness_example_ncp_si917_sdk_{setup}.yaml")
-        with open(resource_output, "w", encoding="utf-8", newline="") as handle:
-            handle.write(output_text)
-        print(
-            f"✅ Resource Updated : "
-            f"{os.path.basename(resource_output)}"
-        )
-    else:
-        print("\n❌ Verification Failed")
-        return
+    os.makedirs(RESOURCES_FOLDER, exist_ok=True)
+    resource_output = os.path.join(RESOURCES_FOLDER, harness_name)
+    with open(resource_output, "w", encoding="utf-8", newline="") as handle:
+        handle.write(output_text)
 
-    print(f"\n✅ Created : {os.path.basename(output_file)}")
-    print(f"✅ Previous Harness Preserved : {previous_milestone}")
-    print(f"✅ New {milestone} Keys Added : {missing_keys_added}")
-    print(f"✅ Config Overrides Applied : {override_count}")
+    print(f"\nCreated : {os.path.basename(output_file)}")
+    print(f"Resource updated : {os.path.basename(resource_output)}")
+    print(f"New keys added : {missing_keys_added}")
+    print(f"Config overrides applied : {override_count}")
+    return True
 
 
 def main():
@@ -829,12 +831,14 @@ def main():
         setups = [sys.argv[4].strip()]
     else:
         setups = list(HARNESS_PRECONDITIONS.keys())
+    failed = []
     for setup in setups:
-        create_setup_harness(
-            milestone,
-            setup
-        )
-    print("\n✅ Harness Update Completed.")
+        if not create_setup_harness(milestone, setup):
+            failed.append(setup)
+    if failed:
+        print("\nHarness update failed for: " + ", ".join(failed))
+        sys.exit(1)
+    print("\nHarness update completed.")
 
 
 if __name__ == "__main__":

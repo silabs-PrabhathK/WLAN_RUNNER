@@ -393,7 +393,7 @@ def counts_from_reports(report_files):
         passed = primary["passed"] + rerun["passed"]
         failed = rerun["failed"]
         errors = rerun["errors"]
-        total = primary["total"]
+        total = passed + failed + errors
     return {
         "passed": passed,
         "failed": failed,
@@ -448,11 +448,12 @@ def send_latest_report(report_files, runtime=None, test_type=None, headline=None
         ):
             if key in headline:
                 final_results[key] = headline[key]
-        final_results["status"] = status_from_counts(
-            final_results.get("passed", 0),
-            final_results.get("failed", 0),
-            final_results.get("errors", 0),
-        )
+        if not headline.get("status"):
+            final_results["status"] = status_from_counts(
+                final_results.get("passed", 0),
+                final_results.get("failed", 0),
+                final_results.get("errors", 0),
+            )
     final_results["attachment_count"] = len(report_files)
     final_results["report_name"] = (
     os.path.basename(primary_report)
@@ -555,9 +556,18 @@ def status_from_counts(passed, failed, errors):
 
 
 def send_mail(report_files, html_body, results):
-    outlook = win32.Dispatch("Outlook.Application")
+    recipients = [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]
+    if not recipients:
+        raise RuntimeError("EMAIL_SETTINGS has no To recipients")
+    try:
+        outlook = win32.Dispatch("Outlook.Application")
+    except Exception as error:
+        raise RuntimeError(
+            "Outlook is not available on this PC, so the result mail was not sent. "
+            f"{error}"
+        ) from error
     mail = outlook.CreateItem(0)
-    mail.To = ";".join(EMAIL_SETTINGS.get("to", []))
+    mail.To = ";".join(recipients)
     mail.CC = ";".join(EMAIL_SETTINGS.get("cc", []))
     mail.Subject = (
         f"[{results.get('setup', '')}] "

@@ -1,3 +1,4 @@
 pyyaml
 pywin32
 ruamel.yaml
+paramiko

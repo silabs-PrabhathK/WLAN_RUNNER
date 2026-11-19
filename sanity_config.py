@@ -64,6 +64,9 @@ CLONE_UPDATE_COMMAND = "git pull"
 # (or resource harness) will be used.
 # ============================================================
 
+# Optional keys on a setup: pi_ip, pi_user, pi_password, pi_reboot_wait.
+# pi_ip defaults to target_ip. Login defaults to pi / raspberry,
+# unless RASPI_USERNAME and RASPI_PASSWORD are set in wlan_runner.local.env.
 EXECUTION_CONFIG = {
     "8A": {
         "display_name": "8A (PDU_2EVK)",

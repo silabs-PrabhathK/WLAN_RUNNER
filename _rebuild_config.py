@@ -1,3 +1,7 @@
+raise SystemExit(
+    "Disabled. This script rewrites sanity_config.py from an old plan snapshot."
+)
+
 import pathlib
 import pprint
 import re
