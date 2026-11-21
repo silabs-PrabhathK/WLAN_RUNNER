@@ -46,12 +46,14 @@ REPOSITORY = {
 }
 
 # Commands run inside utf_wifi after a new clone. {branch} is the full branch.
+# Run inside utf_wifi after the clone, in this order. Errors are printed and
+# the next command still runs.
 POST_CLONE_COMMANDS = [
     "git fetch origin {branch}",
     "git checkout {branch}",
     "git submodule update --init --recursive",
     "python -m venv venv",
-    "workspace_setup.bat",
+    ".\\workspace_setup.bat",
 ]
 
 # Existing clone update. Asked only when the user chooses to update.

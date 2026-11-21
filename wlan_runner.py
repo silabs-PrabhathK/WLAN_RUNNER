@@ -504,8 +504,7 @@ def verify_repository_contents(path):
         if not os.path.exists(os.path.join(path, item))
     ]
     if missing:
-        say("  Repository is missing: " + ", ".join(missing), "red", log=True)
-        say("  Continuing anyway.", "yellow", log=True)
+        say("  Repository is missing: " + ", ".join(missing), "yellow", log=True)
         return False
     write_log(f"Repository contents verified: {path}")
     return True
@@ -553,22 +552,26 @@ def clone_milestone(milestone):
         say(f"  Branch name is not safe to run: {branch}", "red", log=True)
         return None
     os.makedirs(milestone_path, exist_ok=True)
-    if not os.path.isdir(wifi_path):
+    failed = []
+    if os.path.isdir(wifi_path):
+        say("  utf_wifi already exists in this milestone. Clone step skipped.", "yellow", log=True)
+    else:
         section("Clone")
         say("  This can take several minutes.", "dim")
-        clone_command = f"git clone {REPOSITORY['url']}"
-        if not run_command(clone_command, milestone_path):
-            return None
-    if not os.path.isdir(wifi_path):
-        say("  utf_wifi was not created by the clone.", "red", log=True)
-        return None
+        if not run_command(f"git clone {REPOSITORY['url']}", milestone_path):
+            failed.append("git clone")
     for template in POST_CLONE_COMMANDS:
         command = template.format(branch=branch, milestone=git_milestone_name(milestone))
         if not run_command(command, wifi_path):
-            return None
-    # Checked after the release branch and submodules are in place. Warning only.
+            failed.append(command)
+    # Warning only. Checked after the release branch and submodules are in place.
     verify_repository_contents(wifi_path)
-    say(f"  {milestone} is ready on {branch}.", "green", log=True)
+    if failed:
+        say(f"  {milestone} finished with {len(failed)} failed step(s):", "yellow", log=True)
+        for command in failed:
+            say(f"   {command}", "yellow", log=True)
+    else:
+        say(f"  {milestone} is ready on {branch}.", "green", log=True)
     stamp_cloned_markers(milestone)
     return milestone_path
 
