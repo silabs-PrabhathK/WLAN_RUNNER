@@ -36,6 +36,10 @@ def write_plain_summary(folder, summary):
         f"total={summary.get('total', 0)}",
         "",
     ]
+    if summary.get("note"):
+        lines.append("note:")
+        lines.extend(str(summary["note"]).splitlines())
+        lines.append("")
     for row in summary.get("plan_rows") or []:
         lines.append(
             f"{row.get('name', '')}"
@@ -52,6 +56,24 @@ def write_plain_summary(folder, summary):
 
 def generate_html(results):
     test_type = _esc(results.get("test_type") or "WLAN")
+    note_section = ""
+    if results.get("note"):
+        note_text = "<br>".join(_esc(line) for line in str(results["note"]).splitlines())
+        note_section = f"""
+<tr>
+<td colspan="4"
+    style="
+        padding:18px;
+        background:#FEF2F2;
+        border:2px solid #DC2626;
+        color:#991B1B;
+        font-size:16px;
+        line-height:1.6;
+    ">
+{note_text}
+</td>
+</tr>
+"""
     attachment_section = ""
     if results.get("attachment_count", 0):
         attachment_section = f"""
@@ -123,6 +145,7 @@ Silicon Labs Wireless Quality Assurance
 </div>
 </td>
 </tr>
+{note_section}
 <tr>
 <td colspan="4" style="padding:25px;">
 <table width="100%" cellpadding="10" cellspacing="10">
@@ -445,6 +468,7 @@ def send_latest_report(report_files, runtime=None, test_type=None, headline=None
             "passed", "failed", "errors", "total", "status", "plan_rows",
             "milestone", "firmware", "harness", "setup", "product_type",
             "build", "compiler", "stack", "category_label", "run_id",
+            "note", "incomplete",
         ):
             if key in headline:
                 final_results[key] = headline[key]
@@ -573,6 +597,7 @@ def send_mail(report_files, html_body, results):
         f"[{results.get('setup', '')}] "
         f"{results.get('product_type', '')} "
         f"{results.get('test_type', 'WLAN')} REPORT"
+        + (" - INCOMPLETE" if results.get("incomplete") else "")
     )
     mail.HTMLBody = html_body
 

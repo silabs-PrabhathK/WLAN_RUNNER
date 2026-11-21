@@ -153,9 +153,13 @@ def main():
             "test_https_get_sdk.py-pytest-report.html",
         )
         write_html(first, failed=2)
-        time.sleep(0.05)
         write_html(second, passed=5)
         write_html(third, failed=1, errors=1)
+        # Set explicit times. Some file systems store coarse mtimes, which made
+        # two reports tie and changed which one counted as the latest.
+        base_time = time.time() - 60
+        for offset, path in enumerate((first, second, third)):
+            os.utime(path, (base_time + offset, base_time + offset))
 
         summary = wlan_runner.aggregate_run_results([first, second, third])
         assert summary["passed"] == 5, summary
@@ -203,8 +207,9 @@ def main():
             "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee-functional~early~test_early_sdk.py-pytest-report.html",
         )
         write_html(early, passed=4, failed=4)
-        time.sleep(0.05)
         write_html(late, passed=1)
+        os.utime(early, (base_time + 10, base_time + 10))
+        os.utime(late, (base_time + 11, base_time + 11))
         rolled = wlan_runner.aggregate_run_results([early, late])
         assert rolled["passed"] == 1, rolled
         assert rolled["failed"] == 0, rolled

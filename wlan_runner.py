@@ -1,10 +1,11 @@
 """
 WLAN Runner
 
-One script for WLAN connectivity, sanity, and regression.
+One script for WLAN connectivity, sanity, regression, and custom runs.
 """
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -29,12 +30,17 @@ from sanity_config import (
     REPOSITORY,
     SANITY_CONFIG,
     TEST_AGENT_CONFIG,
-    UTF_CORE_CONFIG,
+    RERUN_REQUIREMENT,
     WORKSPACE_ROOT,
     RESOURCE_LAYOUT,
     HARNESS_PRECONDITIONS,
     EMAIL_SETTINGS,
+    XRAY_SETTINGS,
+    XRAY_JOB_TYPE,
 )
+from marker_cases import MARKER_CASES
+from marker_updater import apply_markers, parse_case_lists, remove_marker
+from result_cases import case_ids_for_nodes, outcomes_from_reports
 from test_mail import (
     counts_from_reports,
     parse_report,
@@ -66,6 +72,9 @@ CURRENT_REPORT_SNAPSHOT = {}
 SCRIPT_STARTED_AT = None
 ENV_READY_KEY = None
 COLOR_ENABLED = False
+CLONED_THIS_SESSION = set()
+CAMPAIGN = None  # {test node: final result info} while a campaign with auto-rerun is running
+STOP_MAIL_SENT = False  # True once a stopped campaign has already mailed its partial results
 
 REPORT_MTIME_SLACK_SECONDS = 5
 _UUID_PREFIX = re.compile(
@@ -546,7 +555,7 @@ def clone_milestone(milestone):
     if not os.path.isdir(wifi_path):
         section("Clone")
         say("  This can take several minutes.", "dim")
-        clone_command = f"git clone --recursive {REPOSITORY['url']}"
+        clone_command = f"git clone {REPOSITORY['url']}"
         if not run_command(clone_command, milestone_path):
             return None
     if not os.path.isdir(wifi_path):
@@ -559,7 +568,93 @@ def clone_milestone(milestone):
         if not run_command(command, wifi_path):
             return None
     say(f"  {milestone} is ready on {branch}.", "green", log=True)
+    stamp_cloned_markers(milestone)
     return milestone_path
+
+
+def functional_tests_directory(milestone):
+    relative = SANITY_CONFIG["path"].replace("/", os.sep)
+    return os.path.join(utf_wifi_path(milestone), relative)
+
+
+def stamp_case_markers(milestone, jobs):
+    directory = functional_tests_directory(milestone)
+    if not os.path.isdir(directory):
+        say(f"  Test folder was not found: {directory}", "yellow", log=True)
+        return []
+    results = apply_markers(directory, jobs)
+    if results:
+        say(f"  Files updated: {results[0]['files']}", "dim", log=True)
+    for result in results:
+        say(
+            f"  {result['label']}: {result['matched']}/{result['total']} found, "
+            f"{result['added']} added, {result['already']} already present.",
+            "cyan",
+            log=True,
+        )
+        if result["missing"]:
+            say("  Missing: " + ", ".join(result["missing"]), "yellow", log=True)
+    return results
+
+
+def stamp_cloned_markers(milestone):
+    jobs = []
+    for product, kinds in MARKER_CASES.items():
+        for kind in ("sanity", "regression"):
+            case_ids = kinds.get(kind) or []
+            if case_ids:
+                jobs.append((f"{product} {kind}", case_ids, marker_text(kind)))
+    if not jobs:
+        return
+    section("Markers")
+    say(f"  Adding sanity and regression markers for {milestone}.", "cyan", log=True)
+    stamp_case_markers(milestone, jobs)
+    CLONED_THIS_SESSION.add(milestone)
+
+
+def offer_suite_marker(kind):
+    if CURRENT_MILESTONE in CLONED_THIS_SESSION:
+        say(f"  The {kind} marker was added when this milestone was cloned.", "dim")
+        return
+    product = CURRENT_PRODUCT
+    marker = marker_text(kind)
+    case_ids = (MARKER_CASES.get(product) or {}).get(kind) or []
+    if not case_ids:
+        say(f"  No {kind} case list is configured for {product}.", "yellow", log=True)
+        return
+    if not confirm(f"Update the {kind} marker ({marker}) for {product}?"):
+        say("  Existing markers were left as they are.", "dim")
+        return
+    stamp_case_markers(CURRENT_MILESTONE, [(f"{product} {kind}", case_ids, marker)])
+
+
+def read_custom_case_ids():
+    say("  Paste the case list. Type END on its own line when finished.", "cyan")
+    say('  Example: ["C925838", "C569445"]', "dim")
+    lines = []
+    while True:
+        line = prompt("  > ")
+        if line.upper() == "END":
+            break
+        if line:
+            lines.append(line)
+    groups = parse_case_lists("\n".join(lines))
+    case_ids = []
+    for values in groups.values():
+        case_ids.extend(values)
+    unique = list(dict.fromkeys(case_ids))
+    duplicates = len(case_ids) - len(unique)
+    note = f"  {len(unique)} case ids"
+    if duplicates:
+        note += f" ({duplicates} duplicates removed)"
+    say(note, "cyan")
+    return unique
+
+
+def new_custom_marker():
+    base = marker_text("custom") or "CUSTOM_RUN"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    return f"{base}_{stamp}"
 
 
 def select_milestone():
@@ -738,6 +833,8 @@ def collect_config_findings():
     username, password = artifactory_credentials()
     if not username or not password:
         warnings.append("Artifactory username or password is missing. Add them to wlan_runner.local.env.")
+    if not os.environ.get("VAULT_TOKEN", "").strip():
+        warnings.append("VAULT_TOKEN is missing. Add it to wlan_runner.local.env.")
     return errors, warnings
 
 
@@ -857,26 +954,26 @@ def build_launch_command(setup, pytest_command, manifest):
         else "False"
     )
     rerun = (
-        "True"
+        "1"
         if PYTEST_DEFAULTS.get(
             "rerun_failed_tests",
             True
         )
-        else "False"
+        else "0"
     )
     api = PYTEST_DEFAULTS.get(
         "test_results_source_api",
-        "TEST_RAIL_API"
+        "XRAY_API"
     )
     launch_command = (
         f'call .\\launch_utf_tests.bat '
         f'--target={target_ip} '
         f'--harness={harness} '
         f'--pytest_command="{command}" '
-        f'--test_results_source_api={api} '
+        f'--test_results_source_api {api} '
         f'--publish_test_results {publish} '
         f'--upload_reports_to_artifacts={upload} '
-        f'--rerun_failed_tests={rerun}'
+        f'--rerun_failed_tests {rerun}'
     )
     write_log(f"Launch Command: {launch_command}")
     return launch_command
@@ -1308,7 +1405,7 @@ def select_mail_attachments(report_files, summary=None):
     return attachments[:2]
 
 
-def publish_campaign(destination, report_files, executed):
+def publish_campaign(destination, report_files, executed, send_mail=True, stopped=None):
     summary = aggregate_run_results(report_files)
     regression = (CURRENT_TEST_TYPE or "").lower() == "regression"
     if regression:
@@ -1327,6 +1424,8 @@ def publish_campaign(destination, report_files, executed):
         summary["status"] = headline["status"]
         summary["plan_rows"] = []
         write_log("Mail counts: pytest summary of the attached reports")
+    if stopped:
+        apply_stop_to_summary(summary, stopped, add_rows=regression)
     runtime_file = write_plain_summary(destination, summary)
     write_log(f"Runtime file: {runtime_file}")
     write_log(f"Runtime: {summary['runtime']}")
@@ -1354,9 +1453,16 @@ def publish_campaign(destination, report_files, executed):
             f"  {row.get('status', ''):<8} {row.get('duration', ''):<12} {row.get('name', '')}",
             "green" if row.get("status") == "PASSED" else "yellow",
         )
-    if not attachments and not regression:
-        say("No pytest HTML report was found to mail.","red",log=True,)
-        return summary
+    if send_mail:
+        send_result_mail(summary, attachments, destination)
+    return summary, attachments
+
+
+def send_result_mail(summary, attachments, destination=None):
+    regression = (CURRENT_TEST_TYPE or "").lower() == "regression"
+    if not attachments and not regression and not summary.get("incomplete"):
+        say("No pytest HTML report was found to mail.", "red", log=True)
+        return
     try:
         send_latest_report(
             attachments,
@@ -1366,8 +1472,8 @@ def publish_campaign(destination, report_files, executed):
         )
     except Exception as error:
         say(f"  Mail was not sent: {error}", "red", log=True)
-        say(f"  Reports are saved in {destination}", "yellow", log=True)
-    return summary
+        if destination:
+            say(f"  Reports are saved in {destination}", "yellow", log=True)
 
 
 def prepare_tool(script_name, *args):
@@ -1408,7 +1514,7 @@ def place_tests_folder(milestone):
     say("  Tests folder replaced", "green")
 
 
-def update_settings_defaults(milestone):
+def update_settings_defaults(milestone, job_type=None):
     settings_file = os.path.join(utf_wifi_path(milestone), "config", "settings_defaults.env")
     if not os.path.exists(settings_file):
         say(f"  settings_defaults.env missing: {settings_file}", "red", log=True)
@@ -1421,6 +1527,14 @@ def update_settings_defaults(milestone):
         "ARTIFACTORY_USERNAME": artifactory_setting("username", "ARTIFACTORY_USERNAME"),
         "ARTIFACTORY_PASSWORD": artifactory_setting("password", "ARTIFACTORY_PASSWORD"),
     }
+    replacements.update(XRAY_SETTINGS)
+    if job_type:
+        replacements["JOB_TYPE"] = job_type
+    vault_token = os.environ.get("VAULT_TOKEN", "").strip().strip('"').strip("'")
+    if vault_token:
+        replacements["VAULT_TOKEN"] = f"'{vault_token}'"
+    else:
+        say("  VAULT_TOKEN is missing from wlan_runner.local.env.", "yellow", log=True)
     updated = []
     seen = set()
     for line in lines:
@@ -1485,77 +1599,78 @@ def update_test_agent_cli(milestone):
     say("  sl_wifi_test_agent_cli.py updated", "green")
 
 
-def update_utf_core_files(milestone):
-    utf_core_folder = os.path.join(utf_wifi_path(milestone), "utf_core")
-    launch_utf_tests = os.path.join(utf_core_folder, "src", "utf", "executor", "launch_utf_tests.py")
-    if os.path.exists(launch_utf_tests):
-        with open(launch_utf_tests, "r", encoding="utf-8") as handle:
-            content = handle.read()
-        content = re.sub(
-            r'(help="Enable rerun of failed tests, needs pytest-rerunfailures plugin",\s*default=)0',
-            rf"\1{UTF_CORE_CONFIG['rerun_failed_tests_default']}",
-            content,
-            flags=re.DOTALL,
-        )
-        with open(launch_utf_tests, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(content)
-        write_log("launch_utf_tests.py updated")
-        say("  launch_utf_tests.py updated", "green")
-    else:
-        say(f"  File missing: {launch_utf_tests}", "yellow", log=True)
+def update_rerun_preconditions(milestone):
+    """Apply the current rerun preconditions inside utf_wifi.
 
-    requirements_file = os.path.join(utf_core_folder, "wifi-requirements.txt")
-    if os.path.exists(requirements_file):
+    host-requirements.txt gets pytest-rerunfailures.
+    executor/docker_startup.sh reruns with --lf instead of --reruns.
+    """
+    wifi = utf_wifi_path(milestone)
+    requirements_file = os.path.join(wifi, "host-requirements.txt")
+    if os.path.isfile(requirements_file):
         with open(requirements_file, "r", encoding="utf-8") as handle:
             content = handle.read()
-        requirement = UTF_CORE_CONFIG["pytest_rerunfailures"]
-        if requirement not in content:
-            if not content.endswith("\n"):
+        if RERUN_REQUIREMENT not in content:
+            if content and not content.endswith("\n"):
                 content += "\n"
-            content += requirement + "\n"
+            content += RERUN_REQUIREMENT + "\n"
             with open(requirements_file, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(content)
-            write_log("wifi-requirements.txt updated")
-            say("  wifi-requirements.txt updated", "green")
+            write_log("host-requirements.txt updated")
+            say("  host-requirements.txt updated", "green")
+        else:
+            say("  host-requirements.txt already has pytest-rerunfailures", "green")
     else:
         say(f"  File missing: {requirements_file}", "yellow", log=True)
 
-    run_tests_file = os.path.join(utf_core_folder, "run_tests.sh")
-    if os.path.exists(run_tests_file):
-        with open(run_tests_file, "r", encoding="utf-8") as handle:
-            content = handle.read()
-        old_function = r'''function execute_command() {
-  if [ -n "$RERUN_FAILED_TESTS_COMMAND" ] && [ "$RERUN_FAILED_TESTS_COMMAND" -gt 0 ]; then
-    echo "Rerun failed tests command is enabled. Rerun count: $RERUN_FAILED_TESTS_COMMAND"
-    PYTEST_COMMAND="$1 --reruns $RERUN_FAILED_TESTS_COMMAND"
-  else
-    PYTEST_COMMAND="$1"
-  fi
-  eval echo "Running $PYTEST_COMMAND"
-  eval "$PYTEST_COMMAND"
-  pytest_exitcode=$?
-
-  return $pytest_exitcode
-}'''
-        new_function = r'''function execute_command() {
-  eval echo Running "$1"
-  eval "$1"
-  pytest_exitcode=$?
-  if [ "$RERUN_FAILED_TESTS_COMMAND" ]; then
-    RERUN_FAILED_TESTS="$PYTEST_COMMAND --lf --last-failed-no-failures=none"
-    eval echo Running "$RERUN_FAILED_TESTS"
-    eval "$RERUN_FAILED_TESTS"
-    pytest_exitcode=$?
-  fi
-}'''
-        if old_function in content:
-            content = content.replace(old_function, new_function)
-            with open(run_tests_file, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(content)
-            write_log("run_tests.sh updated")
-            say("  run_tests.sh updated", "green")
-    else:
-        say(f"  File missing: {run_tests_file}", "yellow", log=True)
+    startup_file = os.path.join(wifi, "executor", "docker_startup.sh")
+    if not os.path.isfile(startup_file):
+        say(f"  File missing: {startup_file}", "yellow", log=True)
+        return
+    with open(startup_file, "r", encoding="utf-8") as handle:
+        content = handle.read()
+    if "execute_command()" in content and "--lf --last-failed-no-failures=none" in content:
+        say("  docker_startup.sh already reruns with --lf", "green")
+        return
+    old_block = (
+        "# Add rerun support if configured\n"
+        "if [ -n \"$RERUN_FAILED_TESTS_COMMAND\" ] && [ \"$RERUN_FAILED_TESTS_COMMAND\" -gt 0 ]; then\n"
+        "  echo \"Rerun failed tests enabled. Rerun count: $RERUN_FAILED_TESTS_COMMAND\"\n"
+        "  PYTEST_COMMAND=\"$PYTEST_COMMAND --reruns $RERUN_FAILED_TESTS_COMMAND\"\n"
+        "fi\n"
+        "\n"
+        "echo \"Executing: $PYTEST_COMMAND\"\n"
+        "eval \"$PYTEST_COMMAND\"\n"
+        "pytest_exitcode=$?\n"
+    )
+    new_block = (
+        "execute_command() {\n"
+        "    eval echo Running \"$1\"\n"
+        "    eval \"$1\"\n"
+        "    pytest_exitcode=$?\n"
+        "\n"
+        "    if [ \"$RERUN_FAILED_TESTS_COMMAND\" ] && [ \"$RERUN_FAILED_TESTS_COMMAND\" != \"0\" ] && [ \"$RERUN_FAILED_TESTS_COMMAND\" != \"False\" ]; then\n"
+        "        echo \"Rerun failed tests enabled. Rerun value: $RERUN_FAILED_TESTS_COMMAND\"\n"
+        "\n"
+        "        RERUN_FAILED_TESTS=\"$PYTEST_COMMAND --lf --last-failed-no-failures=none\"\n"
+        "\n"
+        "        eval echo Running \"$RERUN_FAILED_TESTS\"\n"
+        "        eval \"$RERUN_FAILED_TESTS\"\n"
+        "\n"
+        "        pytest_exitcode=$?\n"
+        "    fi\n"
+        "}\n"
+        "\n"
+        "execute_command \"$PYTEST_COMMAND\"\n"
+    )
+    if old_block not in content:
+        say("  docker_startup.sh rerun block was not found, so it was left unchanged.", "yellow", log=True)
+        return
+    content = content.replace(old_block, new_block, 1)
+    with open(startup_file, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+    write_log("docker_startup.sh updated")
+    say("  docker_startup.sh updated", "green")
 
 def ask_pi_reboot():
     choice = choose(
@@ -1578,7 +1693,8 @@ def ask_pi_reboot():
 
 def prepare_execution_environment():
     global ENV_READY_KEY
-    ready_key = f"{CURRENT_MILESTONE}:{CURRENT_SETUP}"
+    job_type = XRAY_JOB_TYPE.get(CURRENT_TEST_TYPE or "", "'ext_regression'")
+    ready_key = f"{CURRENT_MILESTONE}:{CURRENT_SETUP}:{job_type}"
     if ENV_READY_KEY == ready_key:
         section("Environment")
         if not confirm("Environment is already prepared for this milestone and setup. Prepare it again?"):
@@ -1595,9 +1711,9 @@ def prepare_execution_environment():
     say("  Manifest ready", "green")
     place_firmware_files(CURRENT_MILESTONE)
     place_tests_folder(CURRENT_MILESTONE)
-    update_settings_defaults(CURRENT_MILESTONE)
+    update_settings_defaults(CURRENT_MILESTONE, job_type)
     update_test_agent_cli(CURRENT_MILESTONE)
-    update_utf_core_files(CURRENT_MILESTONE)
+    update_rerun_preconditions(CURRENT_MILESTONE)
     ENV_READY_KEY = ready_key
     write_log("Environment preparation completed")
     say("  Environment ready", "green")
@@ -1662,8 +1778,207 @@ def choose_plans(category):
         return chosen
 
 
-def execute_plans(plans, single_node=None):
-    global CURRENT_TEST_NODE
+def record_campaign(executed):
+    """Store the final outcome of every test node seen in this campaign's reports."""
+    for item in executed:
+        for node, result in outcomes_from_reports(item.get("reports")).items():
+            entry = CAMPAIGN.get(node)
+            if entry is None:
+                entry = {
+                    "plan": item["name"],
+                    "manifest": item.get("manifest") or SANITY_CONFIG["manifest"],
+                    "duration": item.get("duration", ""),
+                    "returncode": item.get("returncode"),
+                }
+                CAMPAIGN[node] = entry
+            entry["result"] = result
+
+
+def rerun_nonpass_cases():
+    """Rerun every non-pass case once, through a fresh custom marker."""
+    directory = functional_tests_directory(CURRENT_MILESTONE)
+    nonpass = [node for node, entry in CAMPAIGN.items() if entry["result"] != "passed"]
+    ids_by_node = case_ids_for_nodes(nonpass, directory)
+    grouped = {}
+    unresolved = []
+    for node in nonpass:
+        case_ids = ids_by_node.get(node) or []
+        if not case_ids:
+            unresolved.append(node)
+            continue
+        bucket = grouped.setdefault(CAMPAIGN[node]["manifest"], [])
+        for case_id in case_ids:
+            if case_id not in bucket:
+                bucket.append(case_id)
+    all_ids = []
+    for case_ids in grouped.values():
+        for case_id in case_ids:
+            if case_id not in all_ids:
+                all_ids.append(case_id)
+    all_ids.sort(key=lambda value: int(value[1:]))
+    section("Non-pass rerun")
+    say(f"  Non-pass after the first run: {len(nonpass)} of {len(CAMPAIGN)}", "yellow", log=True)
+    if unresolved:
+        say(f"  No case id for {len(unresolved)} result(s), not rerun:", "yellow", log=True)
+        for node in unresolved:
+            say(f"   {node}", "dim")
+    if not all_ids:
+        say("  No non-pass case ids to rerun.", "green", log=True)
+        return
+    listed = json.dumps(all_ids)
+    say(f"  Running these cases again ({len(all_ids)}):", "cyan", log=True)
+    say(f"  {listed}", "cyan", log=True)
+    write_log(f"Non-pass rerun cases: {listed}")
+    for manifest, case_ids in grouped.items():
+        if len(grouped) > 1:
+            say(f"  Manifest {manifest}: {len(case_ids)} cases", "dim", log=True)
+        run_marked_cases(case_ids, manifest)
+
+
+def stop_reason_text(error):
+    if isinstance(error, KeyboardInterrupt):
+        return "stopped by the user (Ctrl+C)"
+    text = f"{type(error).__name__}: {error}".strip()
+    return text if len(text) <= 300 else text[:297] + "..."
+
+
+def short_list(names, limit=20):
+    names = [str(name) for name in names]
+    if len(names) <= limit:
+        return ", ".join(names)
+    return ", ".join(names[:limit]) + f" and {len(names) - limit} more"
+
+
+def build_stop_info(stage, error, completed, total, incomplete, pending, extra=None):
+    """Describe a campaign that stopped early, for the mail and the console."""
+    lines = [f"RUN STOPPED EARLY ({stage}): {stop_reason_text(error)}."]
+    if total:
+        lines.append(f"Completed {completed} of {total} plan(s).")
+    if incomplete:
+        lines.append("Interrupted, not finished: " + short_list(incomplete))
+    if pending:
+        lines.append("Not run: " + short_list(pending))
+    lines.extend(extra or [])
+    return {
+        "note": "\n".join(lines),
+        "incomplete": list(incomplete),
+        "pending": list(pending),
+    }
+
+
+def apply_stop_to_summary(summary, stopped, add_rows):
+    summary["incomplete"] = True
+    summary["status"] = "INCOMPLETE"
+    summary["note"] = stopped["note"]
+    if add_rows:
+        rows = list(summary.get("plan_rows") or [])
+        for names, status in (
+            (stopped.get("incomplete") or [], "INCOMPLETE"),
+            (stopped.get("pending") or [], "NOT RUN"),
+        ):
+            for name in names:
+                existing = next((row for row in rows if row.get("name") == name), None)
+                if existing is not None:
+                    existing["status"] = status
+                    continue
+                rows.append({
+                    "name": name,
+                    "identity": name,
+                    "passed": 0,
+                    "failed": 0,
+                    "errors": 0,
+                    "status": status,
+                    "duration": "",
+                })
+        summary["plan_rows"] = rows
+    say("  " + stopped["note"].replace("\n", "\n  "), "yellow", log=True)
+
+
+def finish_campaign(first_summary, attachments, destination, stopped=None):
+    """Send one mail that counts every case once, using each case's final result."""
+    if not CAMPAIGN:
+        say("  No per-case results were read. The mail uses the first run summary.", "yellow", log=True)
+        summary = dict(first_summary)
+        if stopped:
+            apply_stop_to_summary(summary, stopped, add_rows=False)
+        send_result_mail(summary, attachments, destination)
+        return
+    total = len(CAMPAIGN)
+    passed = sum(1 for entry in CAMPAIGN.values() if entry["result"] == "passed")
+    failed = total - passed
+    rows = {}
+    for entry in CAMPAIGN.values():
+        row = rows.setdefault(entry["plan"], {
+            "name": entry["plan"],
+            "identity": entry["plan"],
+            "passed": 0,
+            "failed": 0,
+            "errors": 0,
+            "duration": entry.get("duration", ""),
+            "exit_code": entry.get("returncode"),
+        })
+        if entry["result"] == "passed":
+            row["passed"] += 1
+        else:
+            row["failed"] += 1
+    for row in rows.values():
+        row["status"] = "PASSED" if row["failed"] == 0 else "FAILED"
+    summary = dict(first_summary)
+    summary.update({
+        "passed": passed,
+        "failed": failed,
+        "errors": 0,
+        "total": total,
+        "status": "PASSED" if failed == 0 else "FAILED",
+        "plan_rows": list(rows.values()),
+        "runtime": script_runtime_text(),
+    })
+    if stopped:
+        apply_stop_to_summary(summary, stopped, add_rows=True)
+    section("Campaign result")
+    color = "green" if summary["status"] == "PASSED" else "red"
+    say(f"  Total cases: {total}", log=True)
+    say(f"  Passed     : {passed}", "green", log=True)
+    say(f"  Failed     : {failed}", color, log=True)
+    write_log(f"Campaign totals: total={total} passed={passed} failed={failed}")
+    send_result_mail(summary, attachments, destination)
+
+
+def run_marked_cases(case_ids, manifest):
+    marker = new_custom_marker()
+    directory = functional_tests_directory(CURRENT_MILESTONE)
+    if not os.path.isdir(directory):
+        say(f"  Test folder was not found: {directory}", "yellow", log=True)
+        return
+    say(f"  Marker: {marker}", "cyan", log=True)
+    stamped = False
+    try:
+        stamped = True
+        results = stamp_case_markers(CURRENT_MILESTONE, [("nonpass", case_ids, marker)])
+        if not results or results[0]["matched"] == 0:
+            say("  None of those case ids were found, so the rerun was skipped.", "yellow", log=True)
+            return
+        prepare_execution_environment()
+        plan = materialize_plan(None, {
+            "name": "nonpass",
+            "path": SANITY_CONFIG["path"],
+            "marker": marker,
+            "extra_args": SANITY_CONFIG.get("extra_args"),
+            "manifest": manifest,
+        })
+        execute_plans([plan], allow_follow_up=False)
+    finally:
+        if stamped:
+            files_changed, removed = remove_marker(directory, marker)
+            say(
+                f"  Removed custom marker {marker} ({removed} lines, {files_changed} files).",
+                "green",
+                log=True,
+            )
+
+
+def execute_plans(plans, single_node=None, allow_follow_up=True):
+    global CURRENT_TEST_NODE, CAMPAIGN, STOP_MAIL_SENT
     destination = initialize_run()
     executor = resolve_executor()
     if executor is None:
@@ -1677,38 +1992,129 @@ def execute_plans(plans, single_node=None):
             }
         ])
         return
+    nested = not allow_follow_up
+    follow_up = False
+    if allow_follow_up:
+        follow_up = confirm("Rerun non-pass cases automatically after this run?")
+    if follow_up:
+        CAMPAIGN = {}
+    elif not nested:
+        CAMPAIGN = None
     write_log(f"Executor: {executor}")
     say(f"  Executor: {executor}", "dim")
     mark_execution_start()
     CURRENT_TEST_NODE = single_node
+    if not nested:
+        STOP_MAIL_SENT = False
     executed = []
     archived = []
     total = len(plans)
-    for index, plan in enumerate(plans, start=1):
-        command = launch_command_for(CURRENT_SETUP, plan)
-        section(f"{plan['name']}")
-        say(f"  {paint(progress_bar(index, total), 'cyan')}  {index}/{total}")
-        say(f"  Manifest  {plan['manifest']}", "dim")
-        marker = plan.get("marker") or "none"
-        say(f"  Marker    {marker}", "dim")
-        started = time.time()
-        code = run_launch(command, executor)
-        write_log(f"Launch Command: {command}")
-        duration = format_duration(time.time() - started)
-        color = "green" if code == 0 else "red"
-        say(f"  Exit {code}   Plan time {duration}", color, log=True)
-        plan_folder = os.path.join(destination, f"{index:02d}_{_safe_name(plan['name'])}")
-        archived.extend(collect_new_reports(plan_folder))
-        executed.append({
-            "name": plan["name"],
-            "path": plan["path"],
-            "returncode": code,
-            "duration": duration,
-        })
-        with open(os.path.join(destination, "commands.log"), "a", encoding="utf-8") as handle:
-            handle.write(f"[{index}/{total}] exit={code} time={duration}\n{command}\n\n")
+    position = 0
+    plan_done = True
+    stop_error = None
+    try:
+        for index, plan in enumerate(plans, start=1):
+            position = index
+            plan_done = False
+            command = launch_command_for(CURRENT_SETUP, plan)
+            section(f"{plan['name']}")
+            say(f"  {paint(progress_bar(index, total), 'cyan')}  {index}/{total}")
+            say(f"  Manifest  {plan['manifest']}", "dim")
+            marker = plan.get("marker") or "none"
+            say(f"  Marker    {marker}", "dim")
+            started = time.time()
+            code = run_launch(command, executor)
+            write_log(f"Launch Command: {command}")
+            duration = format_duration(time.time() - started)
+            color = "green" if code == 0 else "red"
+            say(f"  Exit {code}   Plan time {duration}", color, log=True)
+            plan_folder = os.path.join(destination, f"{index:02d}_{_safe_name(plan['name'])}")
+            reports = collect_new_reports(plan_folder)
+            archived.extend(reports)
+            executed.append({
+                "name": plan["name"],
+                "path": plan["path"],
+                "manifest": plan.get("manifest"),
+                "returncode": code,
+                "duration": duration,
+                "reports": reports,
+            })
+            plan_done = True
+            with open(os.path.join(destination, "commands.log"), "a", encoding="utf-8") as handle:
+                handle.write(f"[{index}/{total}] exit={code} time={duration}\n{command}\n\n")
+    except (KeyboardInterrupt, Exception) as error:
+        stop_error = error
+        import traceback
+        write_log("Run stopped early:\n" + traceback.format_exc())
     CURRENT_TEST_NODE = None
-    publish_campaign(destination, archived, executed)
+
+    partial = []
+    stopped = None
+    if stop_error is not None:
+        incomplete = [] if plan_done else [plans[position - 1]["name"]]
+        pending = [item["name"] for item in plans[position:]]
+        if incomplete:
+            plan = plans[position - 1]
+            plan_folder = os.path.join(destination, f"{position:02d}_{_safe_name(plan['name'])}")
+            try:
+                reports = collect_new_reports(plan_folder)
+            except Exception:
+                reports = []
+            archived.extend(reports)
+            partial.append({
+                "name": plan["name"],
+                "manifest": plan.get("manifest"),
+                "reports": reports,
+            })
+        extra = ["The non-pass rerun did not start."] if follow_up else None
+        stopped = build_stop_info(
+            "campaign run", stop_error, len(executed), total, incomplete, pending, extra,
+        )
+
+    if CAMPAIGN is not None:
+        record_campaign(executed + partial)
+
+    if stop_error is not None and nested:
+        # The campaign that started this rerun sends the one mail.
+        raise stop_error
+
+    summary, attachments = publish_campaign(
+        destination, archived, executed,
+        send_mail=not (follow_up or nested), stopped=stopped,
+    )
+    if stop_error is not None:
+        try:
+            if follow_up:
+                finish_campaign(summary, attachments, destination, stopped=stopped)
+        finally:
+            CAMPAIGN = None
+            STOP_MAIL_SENT = True
+        raise stop_error
+
+    if follow_up:
+        rerun_stop = None
+        try:
+            rerun_nonpass_cases()
+        except (KeyboardInterrupt, Exception) as error:
+            rerun_stop = error
+            import traceback
+            write_log("Non-pass rerun stopped early:\n" + traceback.format_exc())
+        rerun_info = None
+        if rerun_stop is not None:
+            still = [node for node, entry in CAMPAIGN.items() if entry["result"] != "passed"]
+            rerun_info = build_stop_info(
+                "non-pass rerun", rerun_stop, 0, 0, [], [],
+                [f"The first run finished. Cases still non-pass: {len(still)}."]
+                + ([short_list(still)] if still else []),
+            )
+        try:
+            finish_campaign(summary, attachments, destination, stopped=rerun_info)
+        finally:
+            CAMPAIGN = None
+            if rerun_stop is not None:
+                STOP_MAIL_SENT = True
+        if rerun_stop is not None:
+            raise rerun_stop
 
 
 def _safe_name(name):
@@ -1752,6 +2158,7 @@ def sanity_test():
     CURRENT_TEST_TYPE = "Sanity"
     CURRENT_CATEGORY = None
     CURRENT_CATEGORY_LABEL = ""
+    offer_suite_marker("sanity")
     section("Sanity")
     say(f"  {product}  {setup}  {EXECUTION_CONFIG[setup]['target_ip']}")
     say(f"  Marker: {marker_text(SANITY_CONFIG.get('marker'))}", "dim")
@@ -1778,6 +2185,7 @@ def regression_test():
     CURRENT_PRODUCT = product
     CURRENT_SETUP = setup
     CURRENT_TEST_TYPE = "Regression"
+    offer_suite_marker("regression")
     ordered = list(categories.items())
     options = [
         (str(index), f"{data.get('label', key)}    {len(data.get('plans') or [])} plans")
@@ -1834,6 +2242,63 @@ def regression_test():
     execute_plans(plans)
 
 
+def custom_test():
+    global CURRENT_SETUP, CURRENT_PRODUCT, CURRENT_TEST_TYPE, CURRENT_CATEGORY, CURRENT_CATEGORY_LABEL
+    product, setup = select_product_and_setup()
+    if not setup:
+        return
+    CURRENT_PRODUCT = product
+    CURRENT_SETUP = setup
+    CURRENT_TEST_TYPE = "Custom"
+    CURRENT_CATEGORY = None
+    CURRENT_CATEGORY_LABEL = ""
+    case_ids = read_custom_case_ids()
+    if not case_ids:
+        say("  No case ids were found in the pasted text.", "yellow", log=True)
+        return
+    marker = new_custom_marker()
+    section("Custom run")
+    say(f"  {product}  {setup}  {EXECUTION_CONFIG[setup]['target_ip']}")
+    say(f"  Marker: {marker}", "cyan")
+    say(f"  Path: {SANITY_CONFIG['path']}", "dim")
+    if not confirm("Add this marker and run these cases?"):
+        return
+    directory = functional_tests_directory(CURRENT_MILESTONE)
+    if not os.path.isdir(directory):
+        say(f"  Test folder was not found: {directory}", "yellow", log=True)
+        return
+    stamped = False
+    try:
+        stamped = True
+        results = stamp_case_markers(CURRENT_MILESTONE, [("custom", case_ids, marker)])
+        if not results:
+            return
+        result = results[0]
+        if result["matched"] == 0:
+            say("  None of those case ids were found, so nothing will run.", "yellow", log=True)
+            return
+        if result["missing"] and not confirm("Run the cases that were found?"):
+            return
+        prepare_execution_environment()
+        plan = materialize_plan(None, {
+            "name": "custom",
+            "path": SANITY_CONFIG["path"],
+            "marker": marker,
+            "extra_args": SANITY_CONFIG.get("extra_args"),
+            "manifest": SANITY_CONFIG["manifest"],
+        })
+        execute_plans([plan])
+    finally:
+        if not stamped:
+            return
+        files_changed, removed = remove_marker(directory, marker)
+        say(
+            f"  Removed custom marker {marker} ({removed} lines, {files_changed} files).",
+            "green",
+            log=True,
+        )
+
+
 def campaign_menu():
     if not setup_validation():
         return
@@ -1847,6 +2312,7 @@ def campaign_menu():
                 ("1", "Connectivity     one join test"),
                 ("2", "Sanity            full sanity marker"),
                 ("3", "Regression        pick a category, then the plans"),
+                ("4", "Custom run        paste case ids, then remove the marker"),
             ],
         )
         if choice is None:
@@ -1857,6 +2323,8 @@ def campaign_menu():
             sanity_test()
         elif choice == "3":
             regression_test()
+        elif choice == "4":
+            custom_test()
         say(f"  Script runtime so far: {script_runtime_text()}", "cyan", log=True)
         again = choose(
             "Next",
@@ -1999,10 +2467,13 @@ def main():
         import traceback
         trace = traceback.format_exc()
         write_log(trace)
-        send_failure_mail(
-            "Execution Error",
-            trace
-        )
+        if STOP_MAIL_SENT:
+            write_log("Partial results were already mailed, so no second error mail was sent")
+        else:
+            send_failure_mail(
+                "Execution Error",
+                trace
+            )
         say(
             f"  Stopped because of an error: {error}",
             "red",
