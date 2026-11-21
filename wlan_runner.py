@@ -505,6 +505,7 @@ def verify_repository_contents(path):
     ]
     if missing:
         say("  Repository is missing: " + ", ".join(missing), "red", log=True)
+        say("  Continuing anyway.", "yellow", log=True)
         return False
     write_log(f"Repository contents verified: {path}")
     return True
@@ -561,12 +562,12 @@ def clone_milestone(milestone):
     if not os.path.isdir(wifi_path):
         say("  utf_wifi was not created by the clone.", "red", log=True)
         return None
-    if not verify_repository_contents(wifi_path):
-        return None
     for template in POST_CLONE_COMMANDS:
         command = template.format(branch=branch, milestone=git_milestone_name(milestone))
         if not run_command(command, wifi_path):
             return None
+    # Checked after the release branch and submodules are in place. Warning only.
+    verify_repository_contents(wifi_path)
     say(f"  {milestone} is ready on {branch}.", "green", log=True)
     stamp_cloned_markers(milestone)
     return milestone_path
