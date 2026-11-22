@@ -1695,19 +1695,30 @@ def ask_pi_reboot():
             )
             time.sleep(wait_seconds)
 
-def prepare_execution_environment():
+def prepare_execution_environment(unattended=False):
+    """Prepare the milestone for a run.
+
+    unattended=True is for the automatic non-pass rerun: it never asks. It
+    reuses an environment that is already prepared and skips the Pi reboot menu.
+    """
     global ENV_READY_KEY
     job_type = XRAY_JOB_TYPE.get(CURRENT_TEST_TYPE or "", "'ext_regression'")
     ready_key = f"{CURRENT_MILESTONE}:{CURRENT_SETUP}:{job_type}"
     if ENV_READY_KEY == ready_key:
         section("Environment")
+        if unattended:
+            say("  Reusing the environment prepared for the first run.", "green", log=True)
+            return
         if not confirm("Environment is already prepared for this milestone and setup. Prepare it again?"):
             say("  Reusing the prepared environment.", "green", log=True)
             return
     if not require_artifactory_credentials():
         raise RuntimeError("Artifactory credentials are missing")
     section("Environment")
-    ask_pi_reboot()
+    if unattended:
+        say("  Pi reboot menu skipped for the automatic rerun.", "dim", log=True)
+    else:
+        ask_pi_reboot()
     write_log(f"Environment preparation started for {CURRENT_MILESTONE} {CURRENT_SETUP}")
     prepare_tool("harness_updater.py", CURRENT_SETUP)
     say("  Harness ready", "green")
@@ -1962,7 +1973,7 @@ def run_marked_cases(case_ids, manifest):
         if not results or results[0]["matched"] == 0:
             say("  None of those case ids were found, so the rerun was skipped.", "yellow", log=True)
             return
-        prepare_execution_environment()
+        prepare_execution_environment(unattended=True)
         plan = materialize_plan(None, {
             "name": "nonpass",
             "path": SANITY_CONFIG["path"],
