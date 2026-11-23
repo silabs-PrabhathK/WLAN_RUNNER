@@ -302,7 +302,13 @@ def choose(title, options, allow_quit=True):
         say("  That option is not in the list.", "yellow", log=True)
 
 
+AUTO_MODE = False
+
+
 def confirm(message):
+    if AUTO_MODE:
+        write_log(f"Auto-answered No (unattended run): {message}")
+        return False
     while True:
         raw = prompt(f"\n  {message} (Y/N): ").lower()
         if raw in {"y", "yes"}:
@@ -1993,7 +1999,16 @@ def run_marked_cases(case_ids, manifest):
 
 
 def execute_plans(plans, single_node=None, allow_follow_up=True):
-    global CURRENT_TEST_NODE, CAMPAIGN, STOP_MAIL_SENT
+    global AUTO_MODE
+    previous = AUTO_MODE
+    try:
+        return _execute_plans(plans, single_node, allow_follow_up)
+    finally:
+        AUTO_MODE = previous
+
+
+def _execute_plans(plans, single_node=None, allow_follow_up=True):
+    global CURRENT_TEST_NODE, CAMPAIGN, STOP_MAIL_SENT, AUTO_MODE
     destination = initialize_run()
     executor = resolve_executor()
     if executor is None:
@@ -2015,6 +2030,7 @@ def execute_plans(plans, single_node=None, allow_follow_up=True):
         CAMPAIGN = {}
     elif not nested:
         CAMPAIGN = None
+    AUTO_MODE = True  # nothing may wait for input once the run has started
     write_log(f"Executor: {executor}")
     say(f"  Executor: {executor}", "dim")
     mark_execution_start()
@@ -2442,6 +2458,8 @@ def main():
     enable_console()
     SCRIPT_STARTED_AT = time.time()
     banner()
+    built = time.strftime("%d-%b %H:%M", time.localtime(os.path.getmtime(__file__)))
+    say(f"  Script version: {built} (fully unattended after the run starts)", "dim", log=True)
     checking = "--check" in sys.argv[1:]
     if checking:
         load_local_env()
