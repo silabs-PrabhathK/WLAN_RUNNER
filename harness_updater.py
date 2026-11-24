@@ -6,13 +6,16 @@ Both products work the same way. Only the default harness name differs
 (PRODUCT_DEFAULT_FILES in sanity_config.py) and the Resources folder:
 
   default harness : <milestone>\\utf_wifi\\config\\harnesses\\<default harness>
-  source harness  : the previous milestone's harness for the setup, else
-                    Resources\\<product>
+  source harness  : the previous milestone's harness for the setup, else a
+                    harness you placed in Resources\\<product>, else the newest
+                    one this script exported to Output for the setup
   result          : keys the default has and the source lacks are added, the
                     preconditions from sanity_config.py are applied (they win),
-                    and the file is written to the milestone and Resources.
+                    and the file is written to the milestone and copied to
+                    Output\\<milestone>\\<product>_<setup>\\harness.
 """
 
+import glob
 import io
 import os
 import re
@@ -22,7 +25,9 @@ from ruamel.yaml import YAML
 
 from product_common import (
     DEFAULT_WORKSPACE,
+    OUTPUT_ROOT,
     console_utf8,
+    export_file,
     milestone_folder,
     parse_args,
     read_text,
@@ -720,6 +725,15 @@ def apply_preconditions_to_text(text, setup):
 
     return _join_like(text, lines), applied
 
+def exported_harnesses(product, setup, names):
+    """Harnesses this script exported to Output for the setup, newest first."""
+    found = []
+    for name in names:
+        pattern = os.path.join(OUTPUT_ROOT, "*", f"{product}_{setup}", "harness", name)
+        found += glob.glob(pattern)
+    return sorted(found, key=os.path.getmtime, reverse=True)
+
+
 def create_setup_harness(milestone, setup, product="NCP", workspace=None):
     """Build one setup harness. Returns True when the file was written."""
     workspace = workspace or DEFAULT_WORKSPACE
@@ -753,6 +767,7 @@ def create_setup_harness(milestone, setup, product="NCP", workspace=None):
         previous_folder = milestone_folder(workspace, previous_milestone, "config", "harnesses")
         candidates += [(os.path.join(previous_folder, name), previous_milestone) for name in names]
     candidates += [(os.path.join(resources, name), f"Resources\\{product}") for name in names]
+    candidates += [(path, "Output, exported earlier") for path in exported_harnesses(product, setup, names)]
 
     source_harness = None
     source_label = ""
@@ -795,12 +810,11 @@ def create_setup_harness(milestone, setup, product="NCP", workspace=None):
     output_file = os.path.join(current_folder, harness_name)
     write_text(output_file, output_text)
 
-    os.makedirs(resources, exist_ok=True)
-    resource_output = os.path.join(resources, harness_name)
-    write_text(resource_output, output_text)
+    exported = export_file(output_file, milestone, product, setup, "harness")
 
     print(f"\nCreated : {os.path.basename(output_file)}")
-    print(f"Resource updated : {os.path.basename(resource_output)}")
+    if exported:
+        print(f"Copy in : {exported}")
     print(f"New keys added : {missing_keys_added}")
     print(f"Config overrides applied : {override_count}")
     return True

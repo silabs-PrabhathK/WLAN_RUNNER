@@ -9,6 +9,8 @@ agents of Resources\\NCP. Three files are written:
   manifest_917_ncp_paho.yaml         the same with the paho test agent
   manifest_917_ncp_without_fw.yaml   the same without the firmware lines
 
+Copies of the manifests are also put in Output\\<milestone>\\NCP_<setup>\\manifests.
+
 SoC builds its manifests with soc_manifest_updater.py. Paths, file lookups,
 file copying and the marker edit are shared in product_common.py.
 """
@@ -22,9 +24,11 @@ from product_common import (
     DEFAULT_WORKSPACE,
     console_utf8,
     copy_resource_files,
+    export_file,
     find_file,
     list_files,
     milestone_folder,
+    output_folder,
     parse_args,
     read_text,
     replace_marker_filename,
@@ -35,6 +39,7 @@ from sanity_config import BUILD_CONFIG, MANIFEST_FILES
 
 REGRESSION_ROOT = DEFAULT_WORKSPACE
 RESOURCES_FOLDER = resources_folder("NCP")
+SETUP = ""  # only names the Output folder; the NCP manifests are the same for every setup
 
 
 def find_first_file(include_patterns, exclude_patterns=None):
@@ -172,6 +177,10 @@ def create_manifest(milestone):
         print(f"Alias : {alias_name}")
 
     copy_resource_files(RESOURCES_FOLDER, manifest_folder)
+    for name in (standard_name, MANIFEST_FILES["paho"], without_name, alias_name):
+        if name:
+            export_file(os.path.join(manifest_folder, name), milestone, "NCP", SETUP, "manifests")
+    print(f"Copies in : {output_folder(milestone, 'NCP', SETUP, 'manifests')}")
     print(f"\n✅ Updated : {os.path.basename(manifest_file)}")
     print(f"✅ Created : {os.path.basename(without_fw_manifest)}")
     print("\n✅ Manifest Update Completed")
@@ -181,11 +190,13 @@ def create_manifest(milestone):
 def main():
     global REGRESSION_ROOT
     global RESOURCES_FOLDER
+    global SETUP
 
     console_utf8()
-    milestone, workspace, product, _setup = parse_args(sys.argv)
+    milestone, workspace, product, setup = parse_args(sys.argv)
     REGRESSION_ROOT = workspace
     RESOURCES_FOLDER = resources_folder(product)
+    SETUP = setup
 
     if not create_manifest(milestone):
         sys.exit(1)

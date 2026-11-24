@@ -2101,7 +2101,9 @@ BUILD_DETAILS = {
 # SoC firmware and test agents are signed and encrypted, and SoC has its own
 # manifests, markers and plans. Connectivity, sanity, harness handling and the
 # preconditions code are shared with NCP. Place the firmware, test agents and
-# tests folder in Resources\SoC.
+# tests folder in Resources\SoC, like NCP. The keys, secure script and
+# Simplicity Commander are in SoC_Secure. What is created (manifests, harness,
+# secure files) is copied to Output\<milestone>\SoC_<setup>.
 # ============================================================
 
 # Firmware kept in Resources\SoC. The runner creates secure_<name>_<id>.rps
@@ -2115,11 +2117,11 @@ SOC_SECURE = {
     # Holds the "commander rps convert" commands for every SoC setup, one
     # block per setup under a "REM <setup>" line. Keys stay in that file.
     "script": "SOC_ALL_generate_secure_test_agent_files_txt.txt",
-    # The script, keys, firmware and test agents are kept in Resources\SoC,
-    # with Simplicity Commander 1v15p3b2 in its own subfolder: newer commander
-    # versions refuse to sign the firmware. A relative path starts at the
-    # project folder. SOC_COMMANDER_FOLDER in wlan_runner.local.env overrides it.
-    "commander_folder": r"Resources\SoC\Simplicity Commander",
+    # The script (here), the keys (SoC_Secure\keys) and Simplicity Commander
+    # 1v15p3b2 are kept in SoC_Secure. Newer commander versions refuse to sign
+    # the firmware. A relative path starts at the project folder.
+    # SOC_COMMANDER_FOLDER in wlan_runner.local.env overrides it.
+    "commander_folder": r"SoC_Secure\Simplicity Commander",
     # Number every secure file name of a setup ends with: secure_<name>_<id>.rps
     "setup_ids": {
         "8B": "845",

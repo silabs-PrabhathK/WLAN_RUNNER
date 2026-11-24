@@ -26,29 +26,42 @@ Regression then offers the categories of that setup. Run every plan of a categor
 
 Once a campaign starts it does not wait for input. A failing prepare step is reported and the run goes on.
 
+**Leaving the script:** every menu has `x  Exit script`, and `x` (or `exit`) works at any prompt, including Y/N questions and the case-id paste. `q` goes back one menu where that is allowed. **Ctrl+C** stops a running command at once, ends everything it started (including the launch and its children), and a running campaign mails its partial results. You may see `Terminate batch job (Y/N)?` for up to 3 seconds, which needs no answer.
+
+The console's QuickEdit mode is switched off while the script runs, because a click inside the window would freeze the output and block Ctrl+C. It is switched back on when the script ends.
+
 ## Resources layout
 
-Everything a product needs is kept inside this project, so it runs on any PC. `Resources\` is git-ignored, so copy it by hand to a new PC.
+Everything a product needs is kept inside this project, so it runs on any PC. These three folders are git-ignored (keys and generated files do not belong in git), so copy them by hand to a new PC.
 
 ```text
-Resources\NCP    firmware .rps, "default" test agents, tests folder
-Resources\SoC    firmware .rps, mem_config_3 test agents, tests folder,
-                 secure script (.txt or .bat), ta/m4 private keys (*.pem),
-                 Simplicity Commander\ (version 1v15p3b2)
+Resources\NCP    you place: tests folder, "default" test agents, firmware .rps
+Resources\SoC    you place: tests folder, mem_config_3 test agents, firmware .rps
+SoC_Secure\      stays as it is (SoC signing only):
+                   keys\                  ta_private_key_<id>.pem, m4_private_key_<id>.pem
+                   Simplicity Commander\  version 1v15p3b2
+                   the secure script      (.txt or .bat)
+Output\          created by the script, take what you need from here:
+                   <milestone>\<product>_<setup>\
+                     manifests\     the manifests of that setup
+                     harness\       the harness of that setup
+                     secure_files\  secure_*.rps firmware and test agents (SoC)
 ```
 
-The firmware names that are expected come from `BUILD_CONFIG` (NCP) and `SOC_BUILD_CONFIG` (SoC) in `sanity_config.py`. `--check` and the startup warnings list what is missing.
+`Resources` is never written to by the script, so it stays as clean as you left it. The firmware names that are expected come from `BUILD_CONFIG` (NCP) and `SOC_BUILD_CONFIG` (SoC) in `sanity_config.py`. `--check` and the startup warnings list what is missing.
 
 ## Preparing a setup
 
 Before a run the script prepares the milestone in this order:
 
-1. **SoC only: secure files** (`soc_secure.py`). The secure script in `Resources\SoC` is read. The firmware and test agents are signed with Commander for the chosen setup and written as `secure_<name>_<id>.rps`. Commander output is printed with secrets hidden. Newer Commander versions (1.25) refuse to sign the SiWG917 firmware, so the one in `Resources\SoC\Simplicity Commander` is used (override with `SOC_COMMANDER_FOLDER`).
-2. **Harness** (`harness_updater.py`). The source is the previous milestone harness (M101 uses M100), else `Resources\<product>`. Keys that are new in the milestone default harness are added, then `HARNESS_PRECONDITIONS` are applied, and the config wins. The result is written to the milestone and to `Resources`. `HARNESS_SKIP_KEYS` lists keys that must not be added for a setup.
+1. **SoC only: secure files** (`soc_secure.py`). The secure script in `SoC_Secure` is read. The firmware and test agents from `Resources\SoC` are signed with the keys in `SoC_Secure\keys` for the chosen setup and written to `Output\<milestone>\SoC_<setup>\secure_files` as `secure_<name>_<id>.rps`. Commander output is printed with secrets hidden. Newer Commander versions (1.25) refuse to sign the SiWG917 firmware, so the one in `SoC_Secure\Simplicity Commander` is used (override with `SOC_COMMANDER_FOLDER`).
+2. **Harness** (`harness_updater.py`). The source is the previous milestone harness (M101 uses M100), else a harness you placed in `Resources\<product>`, else the newest one this script exported to `Output` for that setup. Keys that are new in the milestone default harness are added, then `HARNESS_PRECONDITIONS` are applied, and the config wins. The result is written to the milestone and copied to `Output`. `HARNESS_SKIP_KEYS` lists keys that must not be added for a setup.
 3. **Manifest**
    - NCP (`manifest_updater.py`): the default manifest gets the firmware and the `default` test agents. It writes the standard, `_paho` and `_without_fw` manifests.
    - SoC (`soc_manifest_updater.py`): the default manifest gets the secure firmware and the `mem_config_3` test agents (the newest file wins when several fit, so changing names are fine). It writes `manifest_917_soc_<setup>.yaml`, `_PAHO`, `_MEM2` and `manifest_917_soc_secure_<setup>.yaml`.
-4. Firmware and tests folder are copied into the milestone, then settings, the test agent CLI and the rerun preconditions are applied.
+4. Firmware (the secure firmware for SoC) and the tests folder are copied into the milestone, then settings, the test agent CLI and the rerun preconditions are applied.
+
+Copies of the manifests and the harness (and the secure files for SoC) are in `Output\<milestone>\<product>_<setup>`, so they can be taken offline without opening the milestone. The script prints that folder at the end of the preparation.
 
 ## Markers
 

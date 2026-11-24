@@ -2,12 +2,14 @@
 
 Usage: python soc_secure.py <milestone> <workspace> SoC <setup>
 
-Everything is kept in Resources\\SoC: the secure script (SOC_SECURE["script"],
-.txt or .bat), the keys, the firmware and the test agents. Commander runs in
-that folder, the way the script is run by hand, and the secure_*.rps files
-are written there too.
+Where things are:
+  Resources\\SoC        firmware and test agents (you place them, like NCP)
+  SoC_Secure          the secure script (SOC_SECURE["script"], .txt or .bat),
+                      keys\\ with the .pem files, and Simplicity Commander
+  Output\\<milestone>\\SoC_<setup>\\secure_files
+                      the secure_*.rps files that are created
 
-commander.exe comes from Resources\\SoC\\Simplicity Commander
+commander.exe comes from SoC_Secure\\Simplicity Commander
 (SOC_SECURE["commander_folder"], or SOC_COMMANDER_FOLDER in
 wlan_runner.local.env). Newer commander versions refuse to sign the firmware.
 
@@ -32,10 +34,17 @@ import shutil
 import subprocess
 import sys
 
-from product_common import PROJECT_ROOT, console_utf8, resources_folder
+from product_common import (
+    PROJECT_ROOT,
+    SOC_SECURE_ROOT,
+    console_utf8,
+    output_folder,
+    resources_folder,
+)
 from sanity_config import SOC_SECURE, file_stem, firmware_names
 
 RESOURCES_FOLDER = resources_folder("SoC")
+KEYS_FOLDER = os.path.join(SOC_SECURE_ROOT, "keys")
 COMMANDER_TIMEOUT = 300
 
 REM_LINE = re.compile(r"^\s*@?REM\s+(\d+[A-Za-z])\b", re.IGNORECASE)
@@ -57,13 +66,13 @@ def commander_folder():
 
 
 def script_path():
-    """The secure script in Resources\\SoC, as .txt or .bat."""
+    """The secure script in SoC_Secure, as .txt or .bat."""
     name = os.path.basename(str(SOC_SECURE.get("script") or "").strip())
     if not name:
         return None
     stem_name = os.path.splitext(name)[0]
     for candidate in (name, stem_name + ".bat", stem_name + ".txt"):
-        path = os.path.join(RESOURCES_FOLDER, candidate)
+        path = os.path.join(SOC_SECURE_ROOT, candidate)
         if os.path.isfile(path):
             return path
     return None
@@ -152,10 +161,19 @@ def build_jobs(script_jobs, secure_id):
     return firmware + agents
 
 
-def find_in_resources(name):
-    """Key, firmware or test agent in Resources\\SoC."""
+def find_input(name):
+    """Firmware or test agent in Resources\\SoC."""
     path = os.path.join(RESOURCES_FOLDER, os.path.basename(name))
     return path if os.path.isfile(path) else None
+
+
+def find_key(name):
+    """Signing key in SoC_Secure\\keys (or SoC_Secure itself)."""
+    for folder in (KEYS_FOLDER, SOC_SECURE_ROOT):
+        path = os.path.join(folder, os.path.basename(name))
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def hide_secrets(text):
@@ -173,7 +191,7 @@ def run_commander(commander, job, app_path, out_path, sign_path):
     try:
         result = subprocess.run(
             command,
-            cwd=RESOURCES_FOLDER,
+            cwd=SOC_SECURE_ROOT,
             capture_output=True,
             text=True,
             errors="replace",
@@ -187,14 +205,14 @@ def run_commander(commander, job, app_path, out_path, sign_path):
     return result.returncode, hide_secrets(output.strip())
 
 
-def create_secure_files(setup):
-    """Create the secure files of one setup. Returns (ready, problems)."""
+def create_secure_files(milestone, setup):
+    """Create the secure files of one setup in Output. Returns (ready, problems)."""
     ready = []
     problems = []
     path = script_path()
     if not path:
         problems.append(
-            "Secure script not found in Resources\\SoC: "
+            "Secure script not found in SoC_Secure: "
             + os.path.basename(str(SOC_SECURE.get("script") or ""))
         )
         return ready, problems
@@ -213,10 +231,13 @@ def create_secure_files(setup):
     print(f"Secure script : {path}")
     print(f"Setup         : {setup} (id {secure_id}), {len(jobs)} files")
     print(f"Commander     : {commander or 'not found (set SOC_COMMANDER_FOLDER in wlan_runner.local.env)'}")
+    out_folder = output_folder(milestone, "SoC", setup, "secure_files")
+    print(f"Output folder : {out_folder}")
+    os.makedirs(out_folder, exist_ok=True)
 
     for job in jobs:
-        out_path = os.path.join(RESOURCES_FOLDER, job["out"])
-        app_path = find_in_resources(job["app"])
+        out_path = os.path.join(out_folder, job["out"])
+        app_path = find_input(job["app"])
         label = f"{job['out']} ({job['kind']})"
         if not app_path:
             if os.path.isfile(out_path):
@@ -230,10 +251,10 @@ def create_secure_files(setup):
             print(f"  Current  : {label}")
             ready.append(job["out"])
             continue
-        sign_path = find_in_resources(job["sign"])
+        sign_path = find_key(job["sign"])
         if not sign_path:
             print(f"  No key   : {job['sign']} for {job['out']}")
-            problems.append(f"{job['out']} not created: {job['sign']} is not in Resources\\SoC")
+            problems.append(f"{job['out']} not created: {job['sign']} is not in SoC_Secure\\keys")
             continue
         if not commander:
             problems.append(f"{job['out']} not created: Simplicity Commander was not found")
@@ -252,17 +273,18 @@ def create_secure_files(setup):
 
 def main():
     console_utf8()
+    milestone = sys.argv[1].strip() if len(sys.argv) > 1 else ""
     product = sys.argv[3].strip() if len(sys.argv) > 3 else "SoC"
     setup = sys.argv[4].strip() if len(sys.argv) > 4 else ""
     if product != "SoC":
         print("Secure files are only needed for SoC.")
         return 0
-    if not setup:
+    if not setup or not milestone:
         print("Usage: python soc_secure.py <milestone> <workspace> SoC <setup>")
         return 1
 
     print(f"\nSoC secure files for {setup}")
-    ready, problems = create_secure_files(setup)
+    ready, problems = create_secure_files(milestone, setup)
     if problems:
         print(f"\nProblems ({len(problems)}):")
         for problem in problems:
@@ -270,7 +292,7 @@ def main():
 
     secure_id = SOC_SECURE["setup_ids"].get(setup, "")
     required = f"secure_{file_stem(firmware_names('SoC')[0])}_{secure_id}.rps"
-    if not os.path.isfile(os.path.join(RESOURCES_FOLDER, required)):
+    if not os.path.isfile(os.path.join(output_folder(milestone, "SoC", setup, "secure_files"), required)):
         print(f"\nRequired file is missing: {required}")
         return 1
     print(f"\nSecure files ready: {len(ready)}")

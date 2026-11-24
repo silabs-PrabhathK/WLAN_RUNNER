@@ -14,12 +14,44 @@ import shutil
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# What you place: tests folder, test agents and firmware, per product.
 RESOURCES_ROOT = os.path.join(PROJECT_ROOT, "Resources")
+# What SoC signing needs and you do not touch: keys\, the secure script and
+# Simplicity Commander.
+SOC_SECURE_ROOT = os.path.join(PROJECT_ROOT, "SoC_Secure")
+# What the script creates for you to pick up: manifests, harness, secure files.
+OUTPUT_ROOT = os.path.join(PROJECT_ROOT, "Output")
 DEFAULT_WORKSPACE = os.path.dirname(PROJECT_ROOT)
 
 
 def resources_folder(product):
     return os.path.join(RESOURCES_ROOT, product)
+
+
+def output_folder(milestone, product, setup="", kind=None):
+    """Output\\<milestone>\\<product>_<setup>[\\<kind>], not created here.
+
+    kind is manifests, harness or secure_files."""
+    parts = [OUTPUT_ROOT, milestone, f"{product}_{setup}" if setup else product]
+    if kind:
+        parts.append(kind)
+    return os.path.join(*parts)
+
+
+def export_file(path, milestone, product, setup, kind):
+    """Copy a created file into the Output folder. Returns the copy, or None
+    when the file does not exist or cannot be copied."""
+    if not os.path.isfile(path):
+        return None
+    folder = output_folder(milestone, product, setup, kind)
+    try:
+        os.makedirs(folder, exist_ok=True)
+        target = os.path.join(folder, os.path.basename(path))
+        shutil.copy2(path, target)
+    except OSError as error:
+        print(f"Could not copy {os.path.basename(path)} to Output: {error}")
+        return None
+    return target
 
 
 def milestone_folder(workspace, milestone, *parts):
@@ -54,7 +86,7 @@ def parse_args(argv, default_product="NCP"):
 
 
 def list_files(folder):
-    if not os.path.isdir(folder):
+    if not folder or not os.path.isdir(folder):
         return []
     return sorted(os.listdir(folder))
 

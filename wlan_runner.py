@@ -4,10 +4,12 @@ WLAN Runner
 One script for WLAN connectivity, sanity, regression, and custom runs.
 """
 
+import atexit
 import os
 import json
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -44,6 +46,7 @@ from sanity_config import (
     soc_manifest_names,
 )
 from marker_cases import MARKER_CASES
+from product_common import output_folder
 from marker_updater import apply_markers, parse_case_lists, remove_marker
 from result_cases import case_ids_for_nodes, outcomes_from_reports
 from test_mail import (
@@ -176,8 +179,45 @@ def get_resource_root():
         RESOURCE_LAYOUT[product]
     )
 
+_CONSOLE_INPUT_MODE = None
+
+
+def disable_quick_edit():
+    """Windows: a click in the console window freezes the script (QuickEdit
+    selection) and Ctrl+C is ignored until Enter is pressed. Turn QuickEdit
+    off while the script runs. restore_console_mode() puts it back."""
+    global _CONSOLE_INPUT_MODE
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-10)  # standard input
+        mode = ctypes.c_uint()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return  # not a real console (output is piped)
+        _CONSOLE_INPUT_MODE = mode.value
+        # clear ENABLE_QUICK_EDIT_MODE (0x40), set ENABLE_EXTENDED_FLAGS (0x80)
+        kernel32.SetConsoleMode(handle, (mode.value & ~0x0040) | 0x0080)
+        atexit.register(restore_console_mode)  # the console keeps the mode after we exit
+    except Exception:
+        _CONSOLE_INPUT_MODE = None
+
+
+def restore_console_mode():
+    if os.name != "nt" or _CONSOLE_INPUT_MODE is None:
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), _CONSOLE_INPUT_MODE)
+    except Exception:
+        pass
+
+
 def enable_console():
     global COLOR_ENABLED
+    disable_quick_edit()
     try:
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
@@ -283,20 +323,36 @@ def script_runtime_text():
     return f"{format_duration(elapsed)}  ({started} to {finished})"
 
 
+EXIT_WORDS = {"x", "exit", "quit"}
+BACK_WORDS = {"q", "back", "b"}
+
+
+class ExitRequested(KeyboardInterrupt):
+    """The user typed x (or exit) at a menu or prompt. Handled like Ctrl+C."""
+
+
 def prompt(message):
-    return input(paint(message, "white")).strip()
+    """Ask for text. x / exit / quit leaves the script from any prompt."""
+    raw = input(paint(message, "white")).strip()
+    if raw.lower() in EXIT_WORDS:
+        write_log(f"Exit requested at: {message.strip()}")
+        raise ExitRequested()
+    return raw
 
 
 def choose(title, options, allow_quit=True):
-    """options is a list of (key, label). Returns the key, or None on quit."""
+    """options is a list of (key, label). Returns the key, or None on back.
+
+    Every menu has x = exit script. q = back is shown where going back is allowed."""
     while True:
         section(title)
         for key, label in options:
             say(f"  {paint(str(key), 'cyan')}  {label}")
         if allow_quit:
             say(paint("  q  Back / cancel", "dim"))
+        say(paint("  x  Exit script", "dim"))
         raw = prompt("\n  Select: ")
-        if allow_quit and raw.lower() in {"q", "quit", "exit", "back"}:
+        if allow_quit and raw.lower() in BACK_WORDS:
             write_log(f"Menu cancelled: {title}")
             return None
         keys = {str(key): key for key, _label in options}
@@ -315,7 +371,7 @@ def confirm(message):
         write_log(f"Auto-answered No (unattended run): {message}")
         return False
     while True:
-        raw = prompt(f"\n  {message} (Y/N): ").lower()
+        raw = prompt(f"\n  {message} (Y/N, x = exit): ").lower()
         if raw in {"y", "yes"}:
             write_log(f"Confirmed: {message}")
             return True
@@ -494,11 +550,52 @@ def display_milestones(milestones):
         say(f"  {paint(str(index), 'cyan')}  {name:<18} {state}")
 
 
+def stop_process_tree(process):
+    """End a started command and everything it started."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        try:  # let docker and pytest shut down first
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+            process.wait(timeout=3)
+        except Exception:
+            pass
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    else:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except Exception:
+        pass
+
+
+def run_interruptible(command, cwd=None, shell=False):
+    """subprocess.run that Ctrl+C can always stop.
+
+    subprocess.run on Windows cannot be interrupted while the command runs, and
+    Ctrl+C also reaches the batch file ("Terminate batch job (Y/N)?"). The
+    command gets its own process group, this script polls (so Ctrl+C is seen at
+    once), and Ctrl+C ends the whole command tree before it is passed on."""
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    process = subprocess.Popen(command, cwd=cwd, shell=shell, creationflags=flags)
+    try:
+        while process.poll() is None:
+            time.sleep(0.2)
+    except BaseException:
+        say("\n  Stopping the running command...", "yellow", log=True)
+        stop_process_tree(process)
+        raise
+    return subprocess.CompletedProcess(command, process.returncode)
+
+
 def run_command(command, working_directory):
     say(f"  {command}", "dim", log=True)
     say(f"  cwd: {working_directory}", "dim", log=True)
     try:
-        result = subprocess.run(command, cwd=working_directory, shell=True)
+        result = run_interruptible(command, cwd=working_directory, shell=True)
     except Exception as error:
         say(f"  Command error: {error}", "red", log=True)
         return False
@@ -523,7 +620,7 @@ def verify_repository_contents(path):
 
 def show_git_status(path):
     say("  Current clone:", "dim")
-    subprocess.run("git status -sb", cwd=path, shell=True)
+    run_interruptible("git status -sb", cwd=path, shell=True)
     write_log(f"Shown git status for {path}")
 
 
@@ -836,8 +933,29 @@ def collect_config_findings():
         for firmware in (latest, previous):
             if firmware and not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware)):
                 warnings.append(f"{firmware} is missing from Resources\\{folder_name}")
+        resource_dir = os.path.join(RESOURCES_FOLDER, folder_name)
+        if not os.path.isdir(os.path.join(resource_dir, "tests")):
+            warnings.append(
+                f"Tests folder is missing from Resources\\{folder_name}; "
+                "the milestone would keep its own tests folder."
+            )
+        has_agent = os.path.isdir(resource_dir) and any(
+            "test_agent" in name.lower() and name.lower().endswith(".rps")
+            for name in os.listdir(resource_dir)
+        )
+        if not has_agent:
+            warnings.append(f"No test agent (*test_agent*.rps) in Resources\\{folder_name}")
     if "SoC" in RESOURCE_LAYOUT:
         import soc_secure
+        import soc_manifest_updater
+        plain_agents = soc_manifest_updater.plain_files()
+        if plain_agents:
+            unmatched = soc_manifest_updater.unmatched_markers(plain_agents)
+            if unmatched:
+                warnings.append(
+                    "SoC test agent not found for: " + ", ".join(unmatched)
+                    + " (those manifest entries keep the default agent)"
+                )
         if not soc_secure.script_path():
             warnings.append(f"SoC secure script was not found: {SOC_SECURE.get('script')}")
         if not soc_secure.commander_folder():
@@ -847,14 +965,13 @@ def collect_config_findings():
             )
         if not soc_secure.find_commander():
             warnings.append("Simplicity Commander was not found for the SoC secure files (set SOC_COMMANDER_FOLDER in wlan_runner.local.env).")
-        soc_folder = soc_secure.RESOURCES_FOLDER
         for setup_name, secure_id in SOC_SECURE.get("setup_ids", {}).items():
             absent = [
                 key for key in (f"ta_private_key_{secure_id}.pem", f"m4_private_key_{secure_id}.pem")
-                if not os.path.isfile(os.path.join(soc_folder, key))
+                if not soc_secure.find_key(key)
             ]
             if absent:
-                warnings.append(f"SoC {setup_name}: signing key missing from Resources\\SoC: {', '.join(absent)}")
+                warnings.append(f"SoC {setup_name}: signing key missing from SoC_Secure\\keys: {', '.join(absent)}")
 
     if not [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]:
         warnings.append("EMAIL_SETTINGS has no To recipients, so result mail cannot be sent.")
@@ -1054,7 +1171,7 @@ def resolve_executor():
 def run_launch(command, executor):
     write_log(f"Launch: {command}")
     try:
-        result = subprocess.run(command, cwd=executor, shell=True)
+        result = run_interruptible(command, cwd=executor, shell=True)
         write_log(f"Launch exit code: {result.returncode}")
         return result.returncode
     except Exception as error:
@@ -1520,7 +1637,7 @@ def send_result_mail(summary, attachments, destination=None):
 def prepare_tool(script_name, *args):
     command = [sys.executable, script_name, CURRENT_MILESTONE, WORKSPACE, CURRENT_PRODUCT, *args]
     say(f"  {script_name} {' '.join(str(arg) for arg in args)}", "dim", log=True)
-    result = subprocess.run(command, cwd=PROJECT_ROOT)
+    result = run_interruptible(command, cwd=PROJECT_ROOT)
     if result.returncode != 0:
         raise RuntimeError(f"{script_name} failed")
     write_log(f"{script_name} completed")
@@ -1531,7 +1648,10 @@ def place_firmware_files(milestone):
     latest_fw, old_fw = firmware_files_for(CURRENT_PRODUCT, CURRENT_SETUP)
     destination = os.path.join(utf_wifi_path(milestone), "common", "www")
     os.makedirs(destination, exist_ok=True)
-    resource_root = get_resource_root()
+    if CURRENT_PRODUCT == "SoC":
+        resource_root = output_folder(milestone, "SoC", CURRENT_SETUP, "secure_files")
+    else:
+        resource_root = get_resource_root()
     for firmware in (os.path.join(resource_root, latest_fw), os.path.join(resource_root, old_fw)):
         if not os.path.exists(firmware):
             say(f"  Firmware missing: {os.path.basename(firmware)}", "yellow", log=True)
@@ -1769,7 +1889,7 @@ def prepare_execution_environment(unattended=False):
     else:
         prepare_tool("harness_updater.py", CURRENT_SETUP)
         say("  Harness ready", "green")
-        prepare_tool("manifest_updater.py")
+        prepare_tool("manifest_updater.py", CURRENT_SETUP)
         say("  Manifest ready", "green")
     place_firmware_files(CURRENT_MILESTONE)
     place_tests_folder(CURRENT_MILESTONE)
@@ -1779,6 +1899,13 @@ def prepare_execution_environment(unattended=False):
     ENV_READY_KEY = ready_key
     write_log("Environment preparation completed")
     say("  Environment ready", "green")
+    say(
+        "  Created files (manifests, harness"
+        + (", secure files" if CURRENT_PRODUCT == "SoC" else "")
+        + f"): {output_folder(CURRENT_MILESTONE, CURRENT_PRODUCT, CURRENT_SETUP)}",
+        "dim",
+        log=True,
+    )
 
 
 def parse_plan_selection(raw, count):
@@ -2513,6 +2640,7 @@ def main():
         return
     started = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
     say(f"  Started {started}", "dim", log=True)
+    say("  Type x at any menu or prompt to exit. Ctrl+C stops a running campaign.", "dim")
     write_log("===== WLAN Runner started =====")
     try:
         if not verify_dependencies():
@@ -2530,6 +2658,9 @@ def main():
             campaign_menu()
         else:
             say("  No milestone selected.", "yellow", log=True)
+    except ExitRequested:
+        write_log("Exited by user")
+        say("\n  Exited.", "yellow", log=True)
     except KeyboardInterrupt:
         write_log("Stopped by user")
         say(
@@ -2558,6 +2689,7 @@ def main():
         say(f"\n  Runtime: {runtime}", "cyan")
         write_log(f"Runtime: {runtime}")
         write_log("===== WLAN Runner completed =====")
+        restore_console_mode()
 
 
 if __name__ == "__main__":

@@ -11,8 +11,10 @@ setup has its own manifests, built from the milestone's defaults:
                                    manifest_917_soc_<setup>_MEM2.yaml
   manifest_917_soc_secure.yaml  -> manifest_917_soc_secure_<setup>.yaml
 
-The .rps / .hex / .slcp files of Resources\\SoC (and the keys folder) are
-copied beside the manifests.
+The secure files come from Output\\<milestone>\\SoC_<setup>\\secure_files (made
+by soc_secure.py). The .rps / .hex / .slcp files of that folder and of
+Resources\\SoC are copied beside the manifests, and the finished manifests are
+also copied to Output\\<milestone>\\SoC_<setup>\\manifests.
 """
 
 import os
@@ -23,8 +25,10 @@ from product_common import (
     DEFAULT_WORKSPACE,
     console_utf8,
     copy_resource_files,
+    export_file,
     list_files,
     milestone_folder,
+    output_folder,
     read_text,
     replace_marker_filename,
     resources_folder,
@@ -39,6 +43,7 @@ from sanity_config import (
 )
 
 RESOURCES_FOLDER = resources_folder("SoC")
+SECURE_FOLDER = None  # Output\<milestone>\SoC_<setup>\secure_files, set per setup
 
 SOC_DEFAULT_MANIFEST = PRODUCT_DEFAULT_FILES["SoC"]["manifest"]
 SOC_DEFAULT_SECURE_MANIFEST = PRODUCT_DEFAULT_FILES["SoC"]["secure_manifest"]
@@ -79,10 +84,10 @@ SECURE_NAME = re.compile(r"secure_[\w.\-]+?\.rps")
 
 
 def _modified(name):
-    try:
-        return os.path.getmtime(os.path.join(RESOURCES_FOLDER, name))
-    except OSError:
-        return 0
+    for folder in (SECURE_FOLDER, RESOURCES_FOLDER):
+        if folder and os.path.isfile(os.path.join(folder, name)):
+            return os.path.getmtime(os.path.join(folder, name))
+    return 0
 
 
 def newest_match(files, include, exclude=()):
@@ -114,7 +119,7 @@ def pick_file(files, options, exclude=()):
 def secure_files(secure_id):
     suffix = f"_{secure_id}.rps".lower()
     return [
-        name for name in list_files(RESOURCES_FOLDER)
+        name for name in list_files(SECURE_FOLDER)
         if name.lower().startswith("secure_") and name.lower().endswith(suffix)
     ]
 
@@ -123,6 +128,14 @@ def plain_files():
     return [
         name for name in list_files(RESOURCES_FOLDER)
         if name.lower().endswith(".rps") and not name.lower().startswith(("secure_", "encrypted_"))
+    ]
+
+
+def unmatched_markers(files):
+    """First marker of every AGENT_MARKERS entry that has no test agent in files."""
+    return [
+        markers[0] for markers, options, exclude in AGENT_MARKERS
+        if not pick_file(files, options, exclude)
     ]
 
 
@@ -193,7 +206,11 @@ def update_secure_text(text, secure_id):
 
 
 def missing_references(text, manifest_folder):
-    present = {name.lower() for folder in (RESOURCES_FOLDER, manifest_folder) for name in list_files(folder)}
+    present = {
+        name.lower()
+        for folder in (SECURE_FOLDER, RESOURCES_FOLDER, manifest_folder)
+        for name in list_files(folder)
+    }
     return [name for name in sorted(set(SECURE_NAME.findall(text))) if name.lower() not in present]
 
 
@@ -207,10 +224,12 @@ def write_manifest(folder, name, text, notes, source):
 
 
 def create_soc_manifests(workspace, milestone, setup):
+    global SECURE_FOLDER
     secure_id = SOC_SECURE["setup_ids"].get(setup)
     if not secure_id:
         print(f"\n{setup} has no id in SOC_SECURE['setup_ids'].")
         return False
+    SECURE_FOLDER = output_folder(milestone, "SoC", setup, "secure_files")
     folder = milestone_folder(workspace, milestone, "manifest")
     standard = read_text(os.path.join(folder, SOC_DEFAULT_MANIFEST))
     if standard is None:
@@ -242,7 +261,11 @@ def create_soc_manifests(workspace, milestone, setup):
         created.append(names[3])
 
     copy_resource_files(RESOURCES_FOLDER, folder)
+    copy_resource_files(SECURE_FOLDER, folder)
+    for name in created:
+        export_file(os.path.join(folder, name), milestone, "SoC", setup, "manifests")
     print(f"\nManifests updated: {', '.join(created)}")
+    print(f"Copies in : {output_folder(milestone, 'SoC', setup, 'manifests')}")
     return True
 
 
