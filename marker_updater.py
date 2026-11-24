@@ -149,8 +149,6 @@ def apply_markers(directory, jobs):
         order.append((label, marker))
 
     found = {case_id: [] for case_id in wanted}
-    added = 0
-    already = 0
     files_changed = 0
     added_for = {label: 0 for label, _marker in order}
     already_for = {label: 0 for label, _marker in order}
@@ -161,11 +159,9 @@ def apply_markers(directory, jobs):
             if not file_name.endswith(".py"):
                 continue
             path = os.path.join(root, file_name)
-            changed, file_added, file_already, per_label = update_file(
+            changed, _added, _already, per_label = update_file(
                 path, wanted, found, order, normalized,
             )
-            added += file_added
-            already += file_already
             if changed:
                 files_changed += 1
             for label, counts in per_label.items():

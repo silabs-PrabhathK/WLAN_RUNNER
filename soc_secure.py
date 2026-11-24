@@ -1,11 +1,27 @@
-"""Create the secure (signed and encrypted) SoC firmware and test agent files.
+"""Create the secure (signed and encrypted) SoC firmware and test agents.
 
 Usage: python soc_secure.py <milestone> <workspace> SoC <setup>
 
-The commands come from SOC_SECURE["script"]: one block of
-"commander rps convert ..." lines per setup, under a "REM <setup>" line.
-Original files are read from Resources\\SoC and the secure_*.rps files are
-written next to them. Keys in the script are never printed or logged.
+Everything is kept in Resources\\SoC: the secure script (SOC_SECURE["script"],
+.txt or .bat), the keys, the firmware and the test agents. Commander runs in
+that folder, the way the script is run by hand, and the secure_*.rps files
+are written there too.
+
+commander.exe comes from Resources\\SoC\\Simplicity Commander
+(SOC_SECURE["commander_folder"], or SOC_COMMANDER_FOLDER in
+wlan_runner.local.env). Newer commander versions refuse to sign the firmware.
+
+The script holds one block of "commander rps convert ..." lines per setup,
+under a "REM <setup>" line. For each setup:
+
+  firmware    : the latest and old firmware of SOC_BUILD_CONFIG, signed with
+                the --mic / --encrypt / --sign values of the script's
+                SiWG917 line for that setup
+  test agents : every other line of the block, as written in the script
+
+Keys are never copied, printed or logged.
+
+Exit code 1 only when the secure latest firmware is missing at the end.
 """
 
 import glob
@@ -16,25 +32,77 @@ import shutil
 import subprocess
 import sys
 
-from sanity_config import SOC_BUILD_CONFIG, SOC_SECURE
+from product_common import PROJECT_ROOT, console_utf8, resources_folder
+from sanity_config import SOC_SECURE, file_stem, firmware_names
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-RESOURCES_FOLDER = os.path.join(PROJECT_ROOT, "Resources", "SoC")
+RESOURCES_FOLDER = resources_folder("SoC")
+COMMANDER_TIMEOUT = 300
 
 REM_LINE = re.compile(r"^\s*@?REM\s+(\d+[A-Za-z])\b", re.IGNORECASE)
+HEX_SECRET = re.compile(r"\b[0-9A-Fa-f]{32,}\b")
+
+_COMMANDER = None
+
+
+def commander_folder():
+    """The Simplicity Commander folder, or None when it is not on this PC."""
+    configured = os.environ.get("SOC_COMMANDER_FOLDER", "").strip().strip('"')
+    configured = configured or str(SOC_SECURE.get("commander_folder") or "").strip()
+    if not configured:
+        return None
+    folder = os.path.expanduser(configured)
+    if not os.path.isabs(folder):
+        folder = os.path.join(PROJECT_ROOT, folder)
+    return folder if os.path.isdir(folder) else None
 
 
 def script_path():
-    configured = str(SOC_SECURE.get("script") or "").strip()
-    local = os.path.join(RESOURCES_FOLDER, os.path.basename(configured)) if configured else ""
-    for path in (local, configured):
+    """The secure script in Resources\\SoC, as .txt or .bat."""
+    name = os.path.basename(str(SOC_SECURE.get("script") or "").strip())
+    if not name:
+        return None
+    stem_name = os.path.splitext(name)[0]
+    for candidate in (name, stem_name + ".bat", stem_name + ".txt"):
+        path = os.path.join(RESOURCES_FOLDER, candidate)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def find_commander():
+    """Simplicity Commander, found once per process without deep folder walks."""
+    global _COMMANDER
+    if _COMMANDER:
+        return _COMMANDER
+    candidates = []
+    folder = commander_folder()
+    if folder:
+        candidates += [os.path.join(folder, "commander.exe"), os.path.join(folder, "commander-cli.exe")]
+    configured = os.environ.get("COMMANDER_PATH", "").strip().strip('"')
+    if configured:
+        candidates.append(configured)
+    candidates += [shutil.which(name) for name in ("commander-cli", "commander")]
+    installs = os.path.join(os.path.expanduser("~"), ".silabs", "slt", "installs")
+    studio = r"C:\SiliconLabs\SimplicityStudio\v5\developer\adapter_packs\commander"
+    candidates += [
+        os.path.join(installs, "archive", "Simplicity Commander", "commander.exe"),
+        os.path.join(studio, "commander.exe"),
+        os.path.join(studio, "commander-cli.exe"),
+    ]
+    for pattern in (
+        os.path.join(installs, "*", "commander*.exe"),
+        os.path.join(installs, "*", "*", "commander*.exe"),
+    ):
+        candidates += sorted(glob.glob(pattern))
+    for path in candidates:
         if path and os.path.isfile(path):
+            _COMMANDER = path
             return path
     return None
 
 
 def parse_script(text):
-    """Return {setup: [job]} for every "commander rps convert" line."""
+    """Return {setup: [job]} for every complete "commander rps convert" line."""
     blocks = {}
     current = None
     for line in text.splitlines():
@@ -42,75 +110,32 @@ def parse_script(text):
         if match:
             current = match.group(1).upper()
             continue
-        if not line.strip().lower().startswith("commander rps convert"):
-            continue
-        if current is None:
+        if current is None or not line.strip().lower().startswith("commander rps convert"):
             continue
         try:
-            tokens = shlex.split(line.strip())
+            tokens = shlex.split(line.strip(), posix=False)
         except ValueError:
             continue
         if len(tokens) < 4:
             continue
-        job = {"out": tokens[3]}
+        job = {"out": tokens[3].strip('"')}
         index = 4
         while index + 1 < len(tokens):
-            option = tokens[index]
-            if option.startswith("--"):
-                job[option[2:]] = tokens[index + 1]
+            if tokens[index].startswith("--"):
+                job[tokens[index][2:]] = tokens[index + 1].strip('"')
                 index += 2
             else:
                 index += 1
-        if job.get("app") and job.get("mic") and job.get("encrypt") and job.get("sign"):
+        if all(job.get(key) for key in ("app", "mic", "encrypt", "sign")):
             blocks.setdefault(current, []).append(job)
     return blocks
 
 
-def find_commander():
-    configured = os.environ.get("COMMANDER_PATH", "").strip().strip('"')
-    if configured and os.path.isfile(configured):
-        return configured
-    for name in ("commander-cli", "commander"):
-        found = shutil.which(name)
-        if found:
-            return found
-    home = os.path.expanduser("~")
-    patterns = [
-        os.path.join(home, ".silabs", "slt", "installs", "**", "commander*.exe"),
-        r"C:\SiliconLabs\SimplicityStudio\v5\developer\adapter_packs\commander\commander*.exe",
-        r"C:\SiliconLabs\SimplicityStudio\v5\developer\adapter_packs\commander\commander-cli*.exe",
-    ]
-    for pattern in patterns:
-        matches = sorted(glob.glob(pattern, recursive=True))
-        if matches:
-            return matches[0]
-    return None
-
-
-def stem(name):
-    base = os.path.basename(str(name or "").strip().strip("/\\"))
-    return base[:-4] if base.lower().endswith(".rps") else base
-
-
-def firmware_jobs(template, secure_id):
-    """One job per firmware (latest and old), using the template's keys."""
-    jobs = []
-    for key in ("rps_filename", "http_url"):
-        name = os.path.basename(str(SOC_BUILD_CONFIG.get(key) or "").strip("/\\"))
-        if not name:
-            continue
-        job = dict(template)
-        job["app"] = name
-        job["out"] = f"secure_{stem(name)}_{secure_id}.rps"
-        job["kind"] = "latest firmware" if key == "rps_filename" else "old firmware"
-        jobs.append(job)
-    return jobs
-
-
-def build_jobs(setup, script_jobs, secure_id):
-    jobs = []
-    seen = set()
+def build_jobs(script_jobs, secure_id):
+    """Firmware jobs (latest, old) first, then the test agents of the block."""
     template = None
+    agents = []
+    seen = set()
     for job in script_jobs:
         if os.path.basename(job["app"]).lower().startswith("siwg917"):
             template = template or job
@@ -118,101 +143,115 @@ def build_jobs(setup, script_jobs, secure_id):
         if job["out"].lower() in seen:
             continue
         seen.add(job["out"].lower())
-        jobs.append(dict(job, kind="test agent"))
+        agents.append(dict(job, kind="test agent"))
+    firmware = []
     if template:
-        jobs = firmware_jobs(template, secure_id) + jobs
-    return jobs
+        for name, kind in zip(firmware_names("SoC"), ("latest firmware", "old firmware")):
+            if name:
+                firmware.append(dict(template, app=name, out=f"secure_{file_stem(name)}_{secure_id}.rps", kind=kind))
+    return firmware + agents
 
 
-def find_key(name):
-    for folder in (RESOURCES_FOLDER, os.path.join(RESOURCES_FOLDER, "secure_firmware_keys")):
-        path = os.path.join(folder, name)
-        if os.path.isfile(path):
-            return path
-    return None
+def find_in_resources(name):
+    """Key, firmware or test agent in Resources\\SoC."""
+    path = os.path.join(RESOURCES_FOLDER, os.path.basename(name))
+    return path if os.path.isfile(path) else None
 
 
-def run_commander(commander, job, sign_path):
+def hide_secrets(text):
+    return HEX_SECRET.sub("<hidden>", text or "")
+
+
+def run_commander(commander, job, app_path, out_path, sign_path):
     command = [
-        commander, "rps", "convert", job["out"],
-        "--app", job["app"],
+        commander, "rps", "convert", out_path,
+        "--app", app_path,
         "--mic", job["mic"],
         "--encrypt", job["encrypt"],
         "--sign", sign_path,
     ]
-    result = subprocess.run(
-        command,
-        cwd=RESOURCES_FOLDER,
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode, (result.stderr or result.stdout or "").strip()
+    try:
+        result = subprocess.run(
+            command,
+            cwd=RESOURCES_FOLDER,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=COMMANDER_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"commander did not finish in {COMMANDER_TIMEOUT} seconds"
+    except OSError as error:
+        return None, str(error)
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part and part.strip())
+    return result.returncode, hide_secrets(output.strip())
 
 
 def create_secure_files(setup):
-    """Create the secure files for one setup. Returns (made, problems)."""
-    made = []
+    """Create the secure files of one setup. Returns (ready, problems)."""
+    ready = []
     problems = []
     path = script_path()
     if not path:
-        problems.append(f"Secure script not found: {SOC_SECURE.get('script')}")
-        return made, problems
-    with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        blocks = parse_script(handle.read())
+        problems.append(
+            "Secure script not found in Resources\\SoC: "
+            + os.path.basename(str(SOC_SECURE.get("script") or ""))
+        )
+        return ready, problems
     secure_id = SOC_SECURE["setup_ids"].get(setup)
     if not secure_id:
         problems.append(f"{setup} has no id in SOC_SECURE['setup_ids'].")
-        return made, problems
-    script_jobs = blocks.get(setup.upper())
+        return ready, problems
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+        script_jobs = parse_script(handle.read()).get(setup.upper())
     if not script_jobs:
-        problems.append(f"{os.path.basename(path)} has no commands for {setup}.")
-        return made, problems
+        problems.append(f"{os.path.basename(path)} has no commands under REM {setup}.")
+        return ready, problems
+
+    jobs = build_jobs(script_jobs, secure_id)
     commander = find_commander()
-    jobs = build_jobs(setup, script_jobs, secure_id)
-    print(f"Secure script : {os.path.basename(path)}")
+    print(f"Secure script : {path}")
     print(f"Setup         : {setup} (id {secure_id}), {len(jobs)} files")
-    if not commander:
-        print("Commander     : not found, only existing secure files can be used")
-    else:
-        print(f"Commander     : {commander}")
+    print(f"Commander     : {commander or 'not found (set SOC_COMMANDER_FOLDER in wlan_runner.local.env)'}")
+
     for job in jobs:
         out_path = os.path.join(RESOURCES_FOLDER, job["out"])
-        app_path = os.path.join(RESOURCES_FOLDER, job["app"])
-        if not re.search(rf"_{re.escape(secure_id)}\.rps$", job["out"]):
-            problems.append(f"{job['out']} does not end with _{secure_id}.rps")
-        if not os.path.isfile(app_path):
-            print(f"  Missing  : {job['app']} (not in Resources\\SoC)")
-            if not os.path.isfile(out_path):
-                problems.append(f"{job['app']} is missing, so {job['out']} cannot be created")
+        app_path = find_in_resources(job["app"])
+        label = f"{job['out']} ({job['kind']})"
+        if not app_path:
+            if os.path.isfile(out_path):
+                print(f"  Existing : {label}, {job['app']} is not in Resources\\SoC")
+                ready.append(job["out"])
+            else:
+                print(f"  Missing  : {job['app']} is not in Resources\\SoC")
+                problems.append(f"{job['out']} not created: {job['app']} is missing")
             continue
         if os.path.isfile(out_path) and os.path.getmtime(out_path) >= os.path.getmtime(app_path):
-            print(f"  Current  : {job['out']}")
-            made.append(job["out"])
+            print(f"  Current  : {label}")
+            ready.append(job["out"])
             continue
-        sign_path = find_key(job["sign"])
+        sign_path = find_in_resources(job["sign"])
         if not sign_path:
-            problems.append(f"Signing key {job['sign']} is not in Resources\\SoC")
-            print(f"  No key   : {job['sign']}")
+            print(f"  No key   : {job['sign']} for {job['out']}")
+            problems.append(f"{job['out']} not created: {job['sign']} is not in Resources\\SoC")
             continue
         if not commander:
-            problems.append(f"Commander was not found, {job['out']} was not created")
+            problems.append(f"{job['out']} not created: Simplicity Commander was not found")
             continue
-        code, message = run_commander(commander, job, sign_path)
+        code, output = run_commander(commander, job, app_path, out_path, sign_path)
         if code == 0 and os.path.isfile(out_path):
-            print(f"  Secured  : {job['out']}")
-            made.append(job["out"])
-        else:
-            last = message.splitlines()[-1] if message else "no output"
-            problems.append(f"{job['out']} failed (code {code}): {last}")
-            print(f"  Failed   : {job['out']} (code {code})")
-    return made, problems
+            print(f"  Secured  : {label}")
+            ready.append(job["out"])
+            continue
+        print(f"  Failed   : {label}, commander exit code {code}")
+        for line in (output or "no output").splitlines():
+            print(f"             {line}")
+        problems.append(f"{job['out']} failed (exit code {code})")
+    return ready, problems
 
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+    console_utf8()
     product = sys.argv[3].strip() if len(sys.argv) > 3 else "SoC"
     setup = sys.argv[4].strip() if len(sys.argv) > 4 else ""
     if product != "SoC":
@@ -221,17 +260,20 @@ def main():
     if not setup:
         print("Usage: python soc_secure.py <milestone> <workspace> SoC <setup>")
         return 1
+
     print(f"\nSoC secure files for {setup}")
-    made, problems = create_secure_files(setup)
-    latest = os.path.basename(str(SOC_BUILD_CONFIG.get("rps_filename") or "").strip("/\\"))
+    ready, problems = create_secure_files(setup)
+    if problems:
+        print(f"\nProblems ({len(problems)}):")
+        for problem in problems:
+            print(f"  {problem}")
+
     secure_id = SOC_SECURE["setup_ids"].get(setup, "")
-    required = f"secure_{stem(latest)}_{secure_id}.rps"
-    for problem in problems:
-        print(f"  Problem  : {problem}")
+    required = f"secure_{file_stem(firmware_names('SoC')[0])}_{secure_id}.rps"
     if not os.path.isfile(os.path.join(RESOURCES_FOLDER, required)):
         print(f"\nRequired file is missing: {required}")
         return 1
-    print(f"\nSecure files ready: {len(made)}" + (f", {len(problems)} problem(s) above" if problems else ""))
+    print(f"\nSecure files ready: {len(ready)}")
     return 0
 
 

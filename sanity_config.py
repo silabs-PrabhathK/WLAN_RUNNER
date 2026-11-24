@@ -36,8 +36,10 @@ REPOSITORY = {
     "folder": "utf_wifi",
     "branch": "release/{milestone}",
     "required": [
-        "tcmgr",
-        "utf_core",
+        "config",
+        "manifest",
+        "executor",
+        "utf_core_tools",
         "utf_wifi_zephyr",
         "utf_wiseconnect",
         "utf_wiseconnect_3",
@@ -1722,6 +1724,364 @@ HARNESS_PRECONDITIONS = {
         "defaults.iot_sockets.port":
             "6666",
 
+    },
+
+    "8B": {
+
+        # AP
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ip_address":
+            "10.207.18.59",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ssid":
+            "SILABS_SQA_8B",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.admin_password":
+            "admin@12345",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.channel":
+            5,
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_ip":
+            "192.168.50.163",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_port":
+            "1812",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ap_test_ip":
+            "10.207.20.119",
+
+        # Sniffer
+        "devices.airpcap.interfaces.local_shell.remote":
+            "10.207.18.250",
+
+        "devices.airpcap.interfaces.live_capture.host_address":
+            "10.207.18.250",
+
+        # Raspberry Pi
+        "devices.raspi_wifi_ssh.interfaces.linux_shell.remote":
+            "10.207.22.96",
+
+        # Radius
+        "devices.raspi_radius_server.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        "devices.raspi_radius_server_v2.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        # IOP
+        "defaults.iop_sockets.server_ip":
+            "192.168.50.71",
+
+        "defaults.iop_sockets.server_port":
+            "7005",
+
+        # IOT
+        "defaults.iot_sockets.server_ip":
+            "192.168.50.163",
+
+        "defaults.iot_sockets.port":
+            "8989",
+
+        # PDU
+        "devices.switched_ap.interfaces.pdu_switch.hostname":
+            "10.207.18.147",
+
+        "devices.switched_ap.interfaces.pdu_switch.user":
+            "admin",
+
+        "devices.switched_ap.interfaces.pdu_switch.password":
+            "1234",
+
+        "devices.switched_ap.interfaces.pdu_switch.outlet":
+            6,
+
+    },
+
+    "8C": {
+
+        # AP
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ip_address":
+            "10.207.18.215",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ssid":
+            "SILABS_SQA",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.admin_password":
+            "admin@1234",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.channel":
+            8,
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_ip":
+            "192.168.50.72",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_port":
+            "1812",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ap_test_ip":
+            "192.168.50.1",
+
+        # Sniffer
+        "devices.airpcap.interfaces.local_shell.remote":
+            "10.207.22.240",
+
+        "devices.airpcap.interfaces.live_capture.host_address":
+            "10.207.22.240",
+
+        # Raspberry Pi
+        "devices.raspi_wifi_ssh.interfaces.linux_shell.remote":
+            "10.207.19.253",
+
+        "devices.raspi_wifi_ssh1.interfaces.linux_shell.remote":
+            "10.207.19.194",
+
+        "devices.raspi_wifi_ssh2.interfaces.linux_shell.remote":
+            "10.207.21.96",
+
+        # Radius
+        "devices.raspi_radius_server.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        "devices.raspi_radius_server_v2.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        # IOP
+        "defaults.iop_sockets.server_ip":
+            "10.207.18.216",
+
+        "defaults.iop_sockets.server_port":
+            "5002",
+
+        # IOT
+        "defaults.iot_sockets.server_ip":
+            "192.168.50.72",
+
+        "defaults.iot_sockets.port":
+            "6666",
+
+        # PDU
+        "devices.switched_ap.interfaces.pdu_switch.hostname":
+            "10.207.18.112",
+
+        "devices.switched_ap.interfaces.pdu_switch.user":
+            "admin",
+
+        "devices.switched_ap.interfaces.pdu_switch.password":
+            "1234",
+
+        "devices.switched_ap.interfaces.pdu_switch.outlet":
+            2,
+
+    },
+
+    "9B": {
+
+        # AP
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ip_address":
+            "192.168.50.1",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ssid":
+            "917_sdk_9B",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.admin_password":
+            "admin@12345",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.channel":
+            5,
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_ip":
+            "192.168.50.183",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_port":
+            "1812",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ap_test_ip":
+            "192.168.50.1",
+
+        # Sniffer
+        "devices.airpcap.interfaces.local_shell.remote":
+            "10.207.18.213",
+
+        "devices.airpcap.interfaces.live_capture.host_address":
+            "10.207.18.213",
+
+        # Raspberry Pi
+        "devices.raspi_wifi_ssh.interfaces.linux_shell.remote":
+            "10.207.19.234",
+
+        # Radius
+        "devices.raspi_radius_server.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        "devices.raspi_radius_server_v2.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        # IOP
+        "defaults.iop_sockets.server_ip":
+            "10.207.18.188",
+
+        "defaults.iop_sockets.server_port":
+            "5001",
+
+        # IOT
+        "defaults.iot_sockets.server_ip":
+            "192.168.50.183",
+
+        "defaults.iot_sockets.port":
+            "6666",
+
+        # PDU
+        "devices.switched_ap.interfaces.pdu_switch.hostname":
+            "10.207.18.147",
+
+        "devices.switched_ap.interfaces.pdu_switch.user":
+            "admin",
+
+        "devices.switched_ap.interfaces.pdu_switch.password":
+            "1234",
+
+        "devices.switched_ap.interfaces.pdu_switch.outlet":
+            1,
+
+    },
+
+    "10A": {
+
+        # AP
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ip_address":
+            "10.207.18.118",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ssid":
+            "Pravalika_SHRM",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.admin_password":
+            "Admin@1234",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_ip":
+            "192.168.50.114",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_port":
+            "1812",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ap_test_ip":
+            "192.168.50.1",
+
+        # Sniffer
+        "devices.airpcap.interfaces.local_shell.remote":
+            "10.207.23.78",
+
+        "devices.airpcap.interfaces.live_capture.host_address":
+            "10.207.23.78",
+
+        # Raspberry Pi
+        "devices.raspi_wifi_ssh.interfaces.linux_shell.remote":
+            "10.207.23.98",
+
+        # Radius
+        "devices.raspi_radius_server.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        "devices.raspi_radius_server_v2.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        # IOP
+        "defaults.iop_sockets.server_ip":
+            "10.207.18.188",
+
+        "defaults.iop_sockets.server_port":
+            "7007",
+
+        # IOT
+        "defaults.iot_sockets.server_ip":
+            "192.168.50.53",
+
+        "defaults.iot_sockets.port":
+            "6666",
+
+        # PDU
+        "devices.switched_ap.interfaces.pdu_switch.hostname":
+            "10.207.18.149",
+
+        "devices.switched_ap.interfaces.pdu_switch.user":
+            "admin",
+
+        "devices.switched_ap.interfaces.pdu_switch.password":
+            "1234",
+
+        "devices.switched_ap.interfaces.pdu_switch.outlet":
+            1,
+
+    },
+
+    "10C": {
+
+        # AP
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ip_address":
+            "192.168.50.1",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ssid":
+            "917_SOC_10C",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.admin_password":
+            "admin@12345",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.channel":
+            5,
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_ip":
+            "192.168.50.162",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.radius_port":
+            "1812",
+
+        "devices.asus_rt_ax3000_ap.interfaces.wifi.ap_test_ip":
+            "192.168.50.1",
+
+        # Sniffer
+        "devices.airpcap.interfaces.local_shell.remote":
+            "10.207.18.70",
+
+        "devices.airpcap.interfaces.live_capture.host_address":
+            "10.207.18.70",
+
+        # Raspberry Pi
+        "devices.raspi_wifi_ssh.interfaces.linux_shell.remote":
+            "10.207.23.119",
+
+        # Radius
+        "devices.raspi_radius_server.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        "devices.raspi_radius_server_v2.interfaces.radius_server.ap_ip_address":
+            "192.168.50.1/24",
+
+        # IOP
+        "defaults.iop_sockets.server_ip":
+            "10.207.18.188",
+
+        "defaults.iop_sockets.server_port":
+            "5005",
+
+        # IOT
+        "defaults.iot_sockets.server_ip":
+            "192.168.50.98",
+
+        "defaults.iot_sockets.port":
+            "6666",
+
+        # PDU
+        "devices.switched_ap.interfaces.pdu_switch.hostname":
+            "10.207.18.28",
+
+        "devices.switched_ap.interfaces.pdu_switch.user":
+            "admin",
+
+        "devices.switched_ap.interfaces.pdu_switch.password":
+            "1234",
+
+        "devices.switched_ap.interfaces.pdu_switch.outlet":
+            3,
+
     }
 }
 
@@ -1754,7 +2114,12 @@ SOC_BUILD_CONFIG = {
 SOC_SECURE = {
     # Holds the "commander rps convert" commands for every SoC setup, one
     # block per setup under a "REM <setup>" line. Keys stay in that file.
-    "script": r"C:\Users\prkattup\Downloads\SOC_Automation_files_backup\SOC_ALL_generate_secure_test_agent_files_txt.txt",
+    "script": "SOC_ALL_generate_secure_test_agent_files_txt.txt",
+    # The script, keys, firmware and test agents are kept in Resources\SoC,
+    # with Simplicity Commander 1v15p3b2 in its own subfolder: newer commander
+    # versions refuse to sign the firmware. A relative path starts at the
+    # project folder. SOC_COMMANDER_FOLDER in wlan_runner.local.env overrides it.
+    "commander_folder": r"Resources\SoC\Simplicity Commander",
     # Number every secure file name of a setup ends with: secure_<name>_<id>.rps
     "setup_ids": {
         "8B": "845",
@@ -1789,6 +2154,14 @@ PRODUCT_DEFAULT_FILES = {
         "manifest": "manifest_917_soc.yaml",
         "secure_manifest": "manifest_917_soc_secure.yaml",
     },
+}
+
+
+# Default harness keys a setup does not get, even when the default has them.
+HARNESS_SKIP_KEYS = {
+    "9B": [
+        "devices.raspi_wifi.interfaces.wifi.v6_interface",
+    ],
 }
 
 

@@ -1,11 +1,9 @@
 # WLAN Runner
 
 Created by: Prabhath Kattupalli
-Last updated: 19-Nov-2026
+Last updated: 24-Nov-2026
 
-WLAN Runner prepares a WLAN 917 milestone and runs Connectivity, Sanity, or Regression from one script. The same folder can be copied to another PC. Lab targets stay in `sanity_config.py`. Secrets stay in `wlan_runner.local.env` on that PC.
-
-Connectivity and Sanity mail one pytest HTML report on a pass and two on a failure. Those mail counts are the pytest summary totals in the attached reports. Regression totals the latest result of each plan and lists every plan in the mail. It does not attach pytest HTML. Runtime is the full script time.
+WLAN Runner prepares a WLAN 917 milestone and runs Connectivity, Sanity, Regression or a Custom run from one script, for NCP and SoC setups. The same folder can be copied to another PC. Lab targets stay in `sanity_config.py`. Secrets stay in `wlan_runner.local.env` on that PC.
 
 ## Start
 
@@ -14,51 +12,68 @@ pip install -r requirements.txt
 python wlan_runner.py
 ```
 
-`python wlan_runner.py --check` prints configuration errors and warnings without starting a run.
-
-`python _verify_flow.py` is a local self-check of this script. It does not talk to a setup and it does not launch pytest.
+- `python wlan_runner.py --check` prints configuration errors and warnings without starting a run.
+- `python _verify_flow.py` is a local self-check. It does not talk to a setup and it does not launch pytest.
 
 ## What you choose
 
-1. Pick an existing milestone, or clone a new one. New folder names use letters, numbers, dots, underscores, and hyphens.
+1. Pick an existing milestone, or clone a new one. New folder names use letters, numbers, dots, underscores and hyphens.
 2. For an existing `utf_wifi` folder, choose whether to run `git pull`. The folder is left unchanged when you decline.
-3. Pick Connectivity, Sanity, or Regression.
-4. Pick the product and setup. Setups, targets, markers, and plans come from `sanity_config.py`.
+3. Pick **Connectivity**, **Sanity**, **Regression** or **Custom run**.
+4. Pick the product (NCP or SoC) and the setup. Setups, targets, markers and plans come from `sanity_config.py`.
 
-Regression then offers the categories configured for that setup. You can run every plan in a category, every category, or enter plan numbers such as `1,3,5-7`. A category can ask for confirmation before it starts. Stress does that today.
+Regression then offers the categories of that setup. Run every plan of a category, every category, or enter plan numbers such as `1,3,5-7`. Custom run asks for pasted case ids, stamps a temporary marker on those cases, runs them and removes the marker again.
 
-## Where results go
+Once a campaign starts it does not wait for input. A failing prepare step is reported and the run goes on.
+
+## Resources layout
+
+Everything a product needs is kept inside this project, so it runs on any PC. `Resources\` is git-ignored, so copy it by hand to a new PC.
+
+```text
+Resources\NCP    firmware .rps, "default" test agents, tests folder
+Resources\SoC    firmware .rps, mem_config_3 test agents, tests folder,
+                 secure script (.txt or .bat), ta/m4 private keys (*.pem),
+                 Simplicity Commander\ (version 1v15p3b2)
+```
+
+The firmware names that are expected come from `BUILD_CONFIG` (NCP) and `SOC_BUILD_CONFIG` (SoC) in `sanity_config.py`. `--check` and the startup warnings list what is missing.
+
+## Preparing a setup
+
+Before a run the script prepares the milestone in this order:
+
+1. **SoC only: secure files** (`soc_secure.py`). The secure script in `Resources\SoC` is read. The firmware and test agents are signed with Commander for the chosen setup and written as `secure_<name>_<id>.rps`. Commander output is printed with secrets hidden. Newer Commander versions (1.25) refuse to sign the SiWG917 firmware, so the one in `Resources\SoC\Simplicity Commander` is used (override with `SOC_COMMANDER_FOLDER`).
+2. **Harness** (`harness_updater.py`). The source is the previous milestone harness (M101 uses M100), else `Resources\<product>`. Keys that are new in the milestone default harness are added, then `HARNESS_PRECONDITIONS` are applied, and the config wins. The result is written to the milestone and to `Resources`. `HARNESS_SKIP_KEYS` lists keys that must not be added for a setup.
+3. **Manifest**
+   - NCP (`manifest_updater.py`): the default manifest gets the firmware and the `default` test agents. It writes the standard, `_paho` and `_without_fw` manifests.
+   - SoC (`soc_manifest_updater.py`): the default manifest gets the secure firmware and the `mem_config_3` test agents (the newest file wins when several fit, so changing names are fine). It writes `manifest_917_soc_<setup>.yaml`, `_PAHO`, `_MEM2` and `manifest_917_soc_secure_<setup>.yaml`.
+4. Firmware and tests folder are copied into the milestone, then settings, the test agent CLI and the rerun preconditions are applied.
+
+## Markers
+
+Each product has its own markers (`NCP_SANITY_RUN`, `SOC_REGRESSION_RUN`, ...). `MARKER_CASES` in `sanity_config.py` lists the case ids per marker. The runner offers to stamp them into the tests folder of a milestone that has none yet.
+
+## Launch, rerun and results
+
+Plans launch `launch_utf_tests.bat` with the setup target and harness, `--pytest_command="pytest ... -m <marker> <path> --manifest ..."`, and `--rerun_failed_tests 1`. After the first pass, every case that is not `passed` is run once more through a temporary custom marker, and the final result of each case is the one reported.
 
 Each run creates `Reports\<run id>\`:
 
 - `runtime.txt` stores the script runtime
 - `commands.log` stores every launch command
-- numbered plan folders keep a local copy of each pytest HTML file. Regression does not attach those files to the mail.
+- numbered plan folders keep a copy of each pytest HTML report
 
-The mail **Runtime** value is the time from script start through the end of that run. The same time is printed and written to `Logs\sanity_log.txt`.
+Connectivity and Sanity mail one pytest HTML report on a pass and two on a failure. Regression mails the totals of every plan and does not attach pytest HTML. Runtime is the full script time and is also written to `Logs\sanity_log.txt`.
 
-Mail is sent through Outlook on Windows. If Outlook is not available, the run still keeps the reports and says that the mail was not sent. Stopping the script with Ctrl+C does not send a failure mail.
+Mail is sent through Outlook on Windows. If Outlook is not available the reports are kept and the script says that the mail was not sent. If a run is stopped (Ctrl+C or an error), one mail with the partial results and what did not run is sent.
 
 ## Change a setup or a build
 
-Edit `sanity_config.py` for lab data: targets, harness values, firmware names, markers, manifests, plans, and mail recipients.
+Edit `sanity_config.py` for lab data: targets, harness values, firmware names, markers, manifests, plans and mail recipients. Keep `BUILD_DETAILS["firmware"]` and the latest firmware name the same.
 
-`BUILD_DETAILS["firmware"]` is the firmware name shown in the mail. `BUILD_CONFIG["rps_filename"]` is the latest firmware file copied into the milestone. Keep those names the same, and put the `.rps` files in `Resources\NCP` and `Resources\SoC`.
-
-Artifactory username and password do not belong in `sanity_config.py`. Copy `wlan_runner.local.env.example` to `wlan_runner.local.env` and fill them in. Environment variables with the same names are also accepted.
+Artifactory username and password and the Vault token do not belong in `sanity_config.py`. Copy `wlan_runner.local.env.example` to `wlan_runner.local.env` and fill them in. Environment variables with the same names are also accepted. That file is git-ignored.
 
 The optional Pi reboot uses the setup target unless that setup sets `pi_ip`. The login is `pi` / `raspberry` unless the setup sets `pi_user` and `pi_password`, or this PC sets `RASPI_USERNAME` and `RASPI_PASSWORD`.
 
-Leave `WORKSPACE_ROOT` empty to use the folder next to this project. Set it when the milestone clones live somewhere else. If neither place contains milestones, WLAN Runner asks once and remembers the folder.
-
-## Harness and manifest
-
-Harness preparation reads the file name from `EXECUTION_CONFIG`. It starts from the previous milestone harness, then from `Resources\<product>`, and applies `HARNESS_PRECONDITIONS`. A harness name that still says `Need_to_update` is reported at startup and again when that setup is selected.
-
-The manifest step writes the standard, without-firmware, and paho manifests, then copies `.rps`, `.hex`, and `.slcp` files from `Resources\<product>`.
-
-## Sanity and Regression commands
-
-Sanity launches the functional suite with the `sanity` marker from `PYTEST_MARKERS` and `manifest_917_ncp.yaml`.
-
-Regression plans use the marker and manifest configured on each category. A plan can override either one. Open-box and common single test cases run without a marker unless that plan sets one. The without-firmware manifest is `manifest_917_ncp_without_fw.yaml`.
+Leave `WORKSPACE_ROOT` empty to use the folder next to this project. Set it when the milestone clones live somewhere else. If neither place contains milestones, the script asks once and remembers the folder.

@@ -16,7 +16,6 @@ from datetime import datetime
 from sanity_config import (
     ARTIFACTORY_CONFIG,
     BUILD_CONFIG,
-    BUILD_DETAILS,
     CLONE_UPDATE_COMMAND,
     CONNECTIVITY_CONFIG,
     EXECUTION_CONFIG,
@@ -25,7 +24,6 @@ from sanity_config import (
     PRODUCT_SETUPS,
     PROJECT,
     PYTEST_DEFAULTS,
-    PYTEST_MARKERS,
     REGRESSION_PLANS,
     REPOSITORY,
     SANITY_CONFIG,
@@ -41,6 +39,7 @@ from sanity_config import (
     build_config_for,
     build_details_for,
     default_manifest_for,
+    firmware_files_for,
     markers_for,
     soc_manifest_names,
 )
@@ -841,8 +840,21 @@ def collect_config_findings():
         import soc_secure
         if not soc_secure.script_path():
             warnings.append(f"SoC secure script was not found: {SOC_SECURE.get('script')}")
+        if not soc_secure.commander_folder():
+            warnings.append(
+                "SoC Commander folder was not found, so another commander is used. Newer commander "
+                "versions refuse to sign the firmware (set SOC_COMMANDER_FOLDER in wlan_runner.local.env)."
+            )
         if not soc_secure.find_commander():
-            warnings.append("Simplicity Commander was not found for the SoC secure files (set COMMANDER_PATH in wlan_runner.local.env).")
+            warnings.append("Simplicity Commander was not found for the SoC secure files (set SOC_COMMANDER_FOLDER in wlan_runner.local.env).")
+        soc_folder = soc_secure.RESOURCES_FOLDER
+        for setup_name, secure_id in SOC_SECURE.get("setup_ids", {}).items():
+            absent = [
+                key for key in (f"ta_private_key_{secure_id}.pem", f"m4_private_key_{secure_id}.pem")
+                if not os.path.isfile(os.path.join(soc_folder, key))
+            ]
+            if absent:
+                warnings.append(f"SoC {setup_name}: signing key missing from Resources\\SoC: {', '.join(absent)}")
 
     if not [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]:
         warnings.append("EMAIL_SETTINGS has no To recipients, so result mail cannot be sent.")
@@ -1514,25 +1526,9 @@ def prepare_tool(script_name, *args):
     write_log(f"{script_name} completed")
 
 
-def secure_firmware_names():
-    """secure_<firmware>_<id>.rps for the latest and old SoC firmware."""
-    secure_id = SOC_SECURE["setup_ids"].get(CURRENT_SETUP, "")
-    config = build_config_for("SoC")
-    names = []
-    for key in ("rps_filename", "http_url"):
-        name = os.path.basename(str(config.get(key) or "").strip("/\\"))
-        if name.lower().endswith(".rps"):
-            name = name[:-4]
-        names.append(f"secure_{name}_{secure_id}.rps")
-    return names
-
-
 def place_firmware_files(milestone):
-    if CURRENT_PRODUCT == "SoC":
-        latest_fw, old_fw = secure_firmware_names()
-    else:
-        latest_fw = BUILD_CONFIG["rps_filename"].replace("/", "")
-        old_fw = BUILD_CONFIG["http_url"].replace("/", "")
+    """Copy the latest and old firmware (the secure files for SoC) to common\\www."""
+    latest_fw, old_fw = firmware_files_for(CURRENT_PRODUCT, CURRENT_SETUP)
     destination = os.path.join(utf_wifi_path(milestone), "common", "www")
     os.makedirs(destination, exist_ok=True)
     resource_root = get_resource_root()
@@ -1766,7 +1762,7 @@ def prepare_execution_environment(unattended=False):
         # first, then the harness and the manifests are built from them.
         prepare_tool("soc_secure.py", CURRENT_SETUP)
         say("  Secure firmware and test agents ready", "green")
-        prepare_tool("soc_harness_updater.py", CURRENT_SETUP)
+        prepare_tool("harness_updater.py", CURRENT_SETUP)
         say("  Harness ready", "green")
         prepare_tool("soc_manifest_updater.py", CURRENT_SETUP)
         say("  Manifest ready", "green")

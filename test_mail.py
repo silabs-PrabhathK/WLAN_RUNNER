@@ -338,11 +338,6 @@ def _plan_table(results):
     )
 
 
-def send_summary(final_report, summary):
-    """Kept for a one-report resend. Campaign mail uses send_latest_report."""
-    return send_latest_report(final_report, runtime=summary.get("runtime"), test_type=summary.get("test_type"))
-
-
 def pytest_counts(content):
     """Read the pytest-html summary spans. Fall back only when those spans are absent."""
     has_spans = 'class="passed"' in content.lower() or 'class="failed"' in content.lower()

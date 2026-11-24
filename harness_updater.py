@@ -29,7 +29,7 @@ from product_common import (
     resources_folder,
     write_text,
 )
-from sanity_config import EXECUTION_CONFIG, HARNESS_PRECONDITIONS, PRODUCT_DEFAULT_FILES
+from sanity_config import EXECUTION_CONFIG, HARNESS_PRECONDITIONS, HARNESS_SKIP_KEYS, PRODUCT_DEFAULT_FILES
 
 
 class YAMLNull:
@@ -457,13 +457,14 @@ def insert_missing_default_keys(
     source_yaml,
     default_text,
     default_yaml,
+    skip=(),
 ):
 
-    paths = _new_default_paths(
-        default_yaml,
-        source_yaml,
-        source_text,
-    )
+    paths = [
+        path
+        for path in _new_default_paths(default_yaml, source_yaml, source_text)
+        if path not in skip
+    ]
     if not paths:
         return source_text, 0
 
@@ -776,6 +777,7 @@ def create_setup_harness(milestone, setup, product="NCP", workspace=None):
             load_yaml_text(source_text),
             default_text,
             load_yaml_text(default_text),
+            skip=HARNESS_SKIP_KEYS.get(setup, []),
         )
         print(f"Default harness : {default_name}")
     else:
