@@ -48,12 +48,13 @@ SOC_DEFAULT_SECURE_MANIFEST = PRODUCT_DEFAULT_FILES["SoC"]["secure_manifest"]
 # marker(s) -> words the secure file name must (not) contain
 AGENT_MARKERS = [
     (("test_wlan_aws_enable", "test_wlan_rts", "test_352K_M4SS_320K"),
-     ["aws", "mem_config_3"], ["4k"]),
+     ["aws", "mem_config_3", "4k"], []),
     (("test_aws_4k",), ["aws", "4k"], []),
     (("test_twt_sta",), ["twt"], []),
     (("test_ipv6",), ["ipv6_mem"], []),
     (("test_azure",), ["azure"], []),
-    (("test_lwip_stack", "test_lwip_default_timer"), ["lwip_mqtt_default"], []),
+    (("test_lwip_stack",), ["host_lwip_mqtt"], []),
+    (("test_lwip_default_timer",), ["lwip_mqtt_default"], []),
     (("test_lwip_optimized_timer",), ["lwip_mqtt_optimized"], []),
     (("test_lwip_default_timer_ipv6",), ["p_stack_lwip_opt_timer"], []),
 ]
@@ -87,7 +88,7 @@ def update_standard_text(text, secure_id, files):
         text = FIRMWARE_ANCHOR.sub(rf"\g<1>'{secure_latest}'", text, count=1)
         notes.append(f"Firmware -> {secure_latest}")
 
-    agent = find_file(files, ["aws", "mem_config_3"], ["4k"])
+    agent = find_file(files, ["aws", "mem_config_3", "4k"])
     if agent:
         text = WRITE_FIRMWARE.sub(rf"\g<1>'{agent}'", text, count=1)
         notes.append(f"Test agent -> {agent}")

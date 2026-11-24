@@ -1,0 +1,17 @@
+devices:
+  efr_brd4180b:
+    type: 'efx32'
+    subtype: 'brd4180b'
+    defaults:
+      cli_transport: 'serial'
+    # The 'interfaces' attribute is mandatory to describe the control interfaces/functionality of the device
+    interfaces:
+      serial:
+        type: 'serial'
+        port: 'COM12'
+      wifi:
+          type: 'sl_wifi_test_agent_cli'
+          src_dir: 'tests'
+
+defaults:
+  wifi_dut: 'efr_brd4180b'

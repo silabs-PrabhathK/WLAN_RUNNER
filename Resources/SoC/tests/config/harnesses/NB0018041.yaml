@@ -1,0 +1,33 @@
+devices:
+  efr_brd4180b:
+    type: 'efx32'
+    subtype: 'brd4180b'
+    defaults:
+      cli_transport: 'serial'
+    # The 'interfaces' attribute is mandatory to describe the control interfaces/functionality of the device
+    interfaces:
+      serial:
+        type: 'serial'
+        port: 'COM7'
+      wifi:
+          type: 'sl_wifi_test_agent_cli'
+          src_dir: 'tests'
+  guest_ap:
+    interfaces:
+      wifi:
+        type: 'wifi.access_points.static'
+        ssid: 'YOUR_AP_SSID'
+        passphrase: 'YOUR_AP_PASSPHRASE'
+        security: 'wpa2'
+        supports: 'wifi_ap'
+        channel: 1
+
+defaults:
+  wifi:
+    ssid: 'WiFiSDK'
+    passphrase: 'wifisdk@2022'
+    security: 'wpa2'
+    channel: 2
+
+  wifi_dut: 'efr_brd4180b'
+  wifi_access_point: 'guest_ap'

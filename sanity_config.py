@@ -1754,7 +1754,7 @@ SOC_BUILD_CONFIG = {
 SOC_SECURE = {
     # Holds the "commander rps convert" commands for every SoC setup, one
     # block per setup under a "REM <setup>" line. Keys stay in that file.
-    "script": r"C:\Users\prkattup\Downloads\SOC_Automation_files_backup\SOC_ALL_generate_secure_test_agent_files_txt.txt",
+    "script": "SOC_ALL_generate_secure_test_agent_files_txt.txt",
     # Number every secure file name of a setup ends with: secure_<name>_<id>.rps
     "setup_ids": {
         "8B": "845",
@@ -1789,6 +1789,14 @@ PRODUCT_DEFAULT_FILES = {
         "manifest": "manifest_917_soc.yaml",
         "secure_manifest": "manifest_917_soc_secure.yaml",
     },
+}
+
+
+# Default harness keys a setup does not get, even when the default has them.
+HARNESS_SKIP_KEYS = {
+    "9B": [
+        "devices.raspi_wifi.interfaces.wifi.v6_interface",
+    ],
 }
 
 
