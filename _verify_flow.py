@@ -218,7 +218,7 @@ def main():
             reports_dir,
             "ffffffff-ffff-ffff-ffff-ffffffffffff-soc-pytest-report.html",
         )
-        write_html(soc, passed=1, harness="harness_example_SOC_Need_to_update.yaml")
+        write_html(soc, passed=1, harness="harness_example_si917_sdk_8B_PDU_2RASPI.yaml")
         wlan_runner.CURRENT_SETUP = "8B"
         wlan_runner.CURRENT_TEST_NODE = None
         wlan_runner.CURRENT_RUN_START = time.time() - 30

@@ -1,56 +1,34 @@
+"""Create the NCP manifests inside a milestone.
+
+Usage: python manifest_updater.py <milestone> <workspace> NCP
+
+SoC builds its manifests with soc_manifest_updater.py. Paths, file lookups,
+file copying and the marker edit are shared in product_common.py.
+"""
+
 import os
 import re
 import shutil
 import sys
 
-from sanity_config import (MANIFEST_FILES, BUILD_CONFIG)
-
-PROJECT_ROOT = os.path.dirname(
-    os.path.abspath(__file__)
+from product_common import (
+    DEFAULT_WORKSPACE,
+    console_utf8,
+    copy_resource_files as copy_files,
+    find_file,
+    list_files,
+    parse_args,
+    replace_marker_filename,
+    resources_folder,
 )
+from sanity_config import BUILD_CONFIG, MANIFEST_FILES
 
-REGRESSION_ROOT = os.path.dirname(
-    PROJECT_ROOT
-)
-
-RESOURCES_FOLDER = os.path.join(
-    PROJECT_ROOT,
-    "Resources"
-)
+REGRESSION_ROOT = DEFAULT_WORKSPACE
+RESOURCES_FOLDER = resources_folder("NCP")
 
 
-def find_first_file(
-    include_patterns,
-    exclude_patterns=None
-):
-
-    exclude_patterns = exclude_patterns or []
-
-    files = sorted(
-        os.listdir(
-            RESOURCES_FOLDER
-        )
-    )
-
-    for file_name in files:
-
-        lower = file_name.lower()
-
-        if not all(
-            pattern.lower() in lower
-            for pattern in include_patterns
-        ):
-            continue
-
-        if any(
-            pattern.lower() in lower
-            for pattern in exclude_patterns
-        ):
-            continue
-
-        return file_name
-
-    return None
+def find_first_file(include_patterns, exclude_patterns=None):
+    return find_file(list_files(RESOURCES_FOLDER), include_patterns, exclude_patterns)
 
 
 def find_latest_rps():
@@ -125,60 +103,6 @@ def replace_efx32_firmware(
         count=1
     )
 
-
-def replace_marker_filename(
-    text,
-    marker,
-    filename
-):
-
-    lines = text.splitlines()
-
-    inside_marker = False
-
-    for index, line in enumerate(lines):
-
-        stripped = line.strip()
-
-        if stripped.startswith(
-            f"{marker}:"
-        ):
-
-            inside_marker = True
-            continue
-
-        if inside_marker:
-
-            if (
-                stripped.endswith(":")
-                and
-                not stripped.startswith("-")
-                and
-                "device_type" not in stripped
-                and
-                "device_subtype" not in stripped
-                and
-                "filename" not in stripped
-            ):
-                break
-
-            if stripped.startswith(
-                "filename:"
-            ):
-
-                indent = (
-                    len(line)
-                    - len(line.lstrip())
-                )
-
-                lines[index] = (
-                    " " * indent
-                    + f"filename: '{filename}'"
-                )
-
-                break
-
-    return "\n".join(lines)
 
 def ensure_352k_section(
     text,
@@ -387,42 +311,8 @@ def create_without_firmware_manifest(source_manifest,target_manifest):
     )
 
 
-def copy_resource_files(
-    manifest_folder
-):
-
-    copied = 0
-
-    for file_name in os.listdir(
-        RESOURCES_FOLDER
-    ):
-
-        if file_name.lower().endswith(
-            (
-                ".hex",
-                ".rps",
-                ".slcp"
-            )
-        ):
-
-            shutil.copy2(
-
-                os.path.join(
-                    RESOURCES_FOLDER,
-                    file_name
-                ),
-
-                os.path.join(
-                    manifest_folder,
-                    file_name
-                )
-            )
-
-            copied += 1
-
-    print(
-        f"Copied Files : {copied}"
-    )
+def copy_resource_files(manifest_folder):
+    copy_files(RESOURCES_FOLDER, manifest_folder)
 
 
 def create_manifest(milestone):
@@ -565,35 +455,13 @@ def create_paho_manifest(
     )
 
 def main():
-
     global REGRESSION_ROOT
     global RESOURCES_FOLDER
 
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-
-    if len(sys.argv) > 1:
-        milestone = sys.argv[1].strip()
-    else:
-        milestone = input(
-            "\nEnter Current Milestone (Eg: M99): "
-        ).strip()
-
-    if len(sys.argv) > 2 and sys.argv[2].strip():
-        REGRESSION_ROOT = sys.argv[2].strip()
-
-    product = "NCP"
-
-    if len(sys.argv) > 3 and sys.argv[3].strip():
-        product = sys.argv[3].strip()
-
-    RESOURCES_FOLDER = os.path.join(
-        PROJECT_ROOT,
-        "Resources",
-        product
-    )
+    console_utf8()
+    milestone, workspace, product, _setup = parse_args(sys.argv)
+    REGRESSION_ROOT = workspace
+    RESOURCES_FOLDER = resources_folder(product)
 
     if not create_manifest(milestone):
         sys.exit(1)

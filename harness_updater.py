@@ -1,3 +1,18 @@
+"""Create the harness of one setup inside a milestone, for NCP and SoC.
+
+Usage: python harness_updater.py <milestone> <workspace> <NCP|SoC> [<setup>]
+
+Both products work the same way. Only the default harness name differs
+(PRODUCT_DEFAULT_FILES in sanity_config.py) and the Resources folder:
+
+  default harness : <milestone>\\utf_wifi\\config\\harnesses\\<default harness>
+  source harness  : the previous milestone's harness for the setup, else
+                    Resources\\<product>
+  result          : keys the default has and the source lacks are added, the
+                    preconditions from sanity_config.py are applied (they win),
+                    and the file is written to the milestone and Resources.
+"""
+
 import io
 import os
 import re
@@ -5,7 +20,16 @@ import sys
 
 from ruamel.yaml import YAML
 
-from sanity_config import EXECUTION_CONFIG, HARNESS_PRECONDITIONS
+from product_common import (
+    DEFAULT_WORKSPACE,
+    console_utf8,
+    milestone_folder,
+    parse_args,
+    read_text,
+    resources_folder,
+    write_text,
+)
+from sanity_config import EXECUTION_CONFIG, HARNESS_PRECONDITIONS, PRODUCT_DEFAULT_FILES
 
 
 class YAMLNull:
@@ -61,27 +85,11 @@ KEY_LINE = re.compile(
 )
 
 
-PROJECT_ROOT = os.path.dirname(
-    os.path.abspath(__file__)
-)
-
-REGRESSION_ROOT = os.path.dirname(
-    PROJECT_ROOT
-)
-
-RESOURCES_FOLDER = os.path.join(
-    PROJECT_ROOT,
-    "Resources"
-)
-
-
 def harness_file_name(setup):
-    configured = os.path.basename(
+    """Harness file name of a setup, as set in EXECUTION_CONFIG."""
+    return os.path.basename(
         str((EXECUTION_CONFIG.get(setup) or {}).get("harness") or "").strip()
     )
-    if configured:
-        return configured
-    return f"harness_example_ncp_si917_sdk_{setup}.yaml"
 
 
 def get_previous_milestone(current_milestone):
@@ -711,46 +719,39 @@ def apply_preconditions_to_text(text, setup):
 
     return _join_like(text, lines), applied
 
-def create_setup_harness(milestone, setup):
+def create_setup_harness(milestone, setup, product="NCP", workspace=None):
+    """Build one setup harness. Returns True when the file was written."""
+    workspace = workspace or DEFAULT_WORKSPACE
+    resources = resources_folder(product)
+    default_name = PRODUCT_DEFAULT_FILES[product]["harness"]
     harness_name = harness_file_name(setup)
-    legacy_name = f"harness_example_ncp_si917_sdk_{setup}.yaml"
-    previous_milestone = get_previous_milestone(milestone)
-
-    current_harness_folder = os.path.join(
-        REGRESSION_ROOT,
-        milestone,
-        "utf_wifi",
-        "config",
-        "harnesses",
-    )
-    default_harness = os.path.join(
-        current_harness_folder,
-        "harness_example_ncp_si917_sdk.yaml",
-    )
+    if not harness_name:
+        harness_name = f"{os.path.splitext(default_name)[0]}_{setup}.yaml"
 
     print("\n====================================")
-    print(f"Processing Setup : {setup}")
+    print(f"Processing Setup : {setup} ({product})")
     print("====================================")
 
-    if not os.path.isdir(current_harness_folder):
-        print(f"\nHarness folder missing: {current_harness_folder}")
+    if "need_to_update" in harness_name.lower():
+        print(f"\n{setup} has no real harness file name in sanity_config.py.")
         return False
 
+    current_folder = milestone_folder(workspace, milestone, "config", "harnesses")
+    default_harness = os.path.join(current_folder, default_name)
+    if not os.path.isdir(current_folder):
+        print(f"\nHarness folder missing: {current_folder}")
+        return False
+
+    # Older milestones may still use <default stem>_<setup>.yaml.
+    legacy_name = f"{os.path.splitext(default_name)[0]}_{setup}.yaml"
+    names = [harness_name] + ([legacy_name] if legacy_name != harness_name else [])
+
     candidates = []
+    previous_milestone = get_previous_milestone(milestone)
     if previous_milestone:
-        previous_folder = os.path.join(
-            REGRESSION_ROOT,
-            previous_milestone,
-            "utf_wifi",
-            "config",
-            "harnesses",
-        )
-        candidates.append((os.path.join(previous_folder, harness_name), previous_milestone))
-        if legacy_name != harness_name:
-            candidates.append((os.path.join(previous_folder, legacy_name), previous_milestone))
-    candidates.append((os.path.join(RESOURCES_FOLDER, harness_name), "Resources"))
-    if legacy_name != harness_name:
-        candidates.append((os.path.join(RESOURCES_FOLDER, legacy_name), "Resources"))
+        previous_folder = milestone_folder(workspace, previous_milestone, "config", "harnesses")
+        candidates += [(os.path.join(previous_folder, name), previous_milestone) for name in names]
+    candidates += [(os.path.join(resources, name), f"Resources\\{product}") for name in names]
 
     source_harness = None
     source_label = ""
@@ -766,36 +767,35 @@ def create_setup_harness(milestone, setup):
         return False
 
     print(f"\nSource harness: {os.path.basename(source_harness)} ({source_label})")
-    with open(source_harness, "r", encoding="utf-8") as handle:
-        source_text = handle.read()
+    source_text = read_text(source_harness)
 
-    if os.path.isfile(default_harness):
-        with open(default_harness, "r", encoding="utf-8") as handle:
-            default_text = handle.read()
+    default_text = read_text(default_harness)
+    if default_text is not None:
         output_text, missing_keys_added = insert_missing_default_keys(
             source_text,
             load_yaml_text(source_text),
             default_text,
             load_yaml_text(default_text),
         )
+        print(f"Default harness : {default_name}")
     else:
         print(f"Default harness not found. Copying the source harness: {default_harness}")
         output_text = source_text
         missing_keys_added = 0
 
+    if setup not in HARNESS_PRECONDITIONS:
+        print(f"{setup} has no preconditions in sanity_config.py.")
     output_text, override_count = apply_preconditions_to_text(
         output_text,
         setup,
     )
 
-    output_file = os.path.join(current_harness_folder, harness_name)
-    with open(output_file, "w", encoding="utf-8", newline="") as handle:
-        handle.write(output_text)
+    output_file = os.path.join(current_folder, harness_name)
+    write_text(output_file, output_text)
 
-    os.makedirs(RESOURCES_FOLDER, exist_ok=True)
-    resource_output = os.path.join(RESOURCES_FOLDER, harness_name)
-    with open(resource_output, "w", encoding="utf-8", newline="") as handle:
-        handle.write(output_text)
+    os.makedirs(resources, exist_ok=True)
+    resource_output = os.path.join(resources, harness_name)
+    write_text(resource_output, output_text)
 
     print(f"\nCreated : {os.path.basename(output_file)}")
     print(f"Resource updated : {os.path.basename(resource_output)}")
@@ -805,36 +805,16 @@ def create_setup_harness(milestone, setup):
 
 
 def main():
-    global REGRESSION_ROOT
-    global RESOURCES_FOLDER
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-    if len(sys.argv) > 1:
-        milestone = sys.argv[1].strip()
-    else:
-        milestone = input(
-            "\nEnter Current Milestone (Eg: M99): "
-        ).strip()
-    if len(sys.argv) > 2 and sys.argv[2].strip():
-        REGRESSION_ROOT = sys.argv[2].strip()
-    product = "NCP"
-    if len(sys.argv) > 3 and sys.argv[3].strip():
-        product = sys.argv[3].strip()
-    RESOURCES_FOLDER = os.path.join(
-        PROJECT_ROOT,
-        "Resources",
-        product
-    )
-    if len(sys.argv) > 4 and sys.argv[4].strip():
-        setups = [sys.argv[4].strip()]
-    else:
-        setups = list(HARNESS_PRECONDITIONS.keys())
+    console_utf8()
+    milestone, workspace, product, setup = parse_args(sys.argv)
+    if product not in PRODUCT_DEFAULT_FILES:
+        print(f"Unknown product: {product}")
+        sys.exit(1)
+    setups = [setup] if setup else list(HARNESS_PRECONDITIONS.keys())
     failed = []
-    for setup in setups:
-        if not create_setup_harness(milestone, setup):
-            failed.append(setup)
+    for name in setups:
+        if not create_setup_harness(milestone, name, product, workspace):
+            failed.append(name)
     if failed:
         print("\nHarness update failed for: " + ", ".join(failed))
         sys.exit(1)

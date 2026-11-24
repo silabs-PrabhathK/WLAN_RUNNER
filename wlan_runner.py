@@ -37,6 +37,12 @@ from sanity_config import (
     EMAIL_SETTINGS,
     XRAY_SETTINGS,
     XRAY_JOB_TYPE,
+    SOC_SECURE,
+    build_config_for,
+    build_details_for,
+    default_manifest_for,
+    markers_for,
+    soc_manifest_names,
 )
 from marker_cases import MARKER_CASES
 from marker_updater import apply_markers, parse_case_lists, remove_marker
@@ -613,11 +619,11 @@ def stamp_cloned_markers(milestone):
         for kind in ("sanity", "regression"):
             case_ids = kinds.get(kind) or []
             if case_ids:
-                jobs.append((f"{product} {kind}", case_ids, marker_text(kind)))
+                jobs.append((f"{product} {kind}", case_ids, marker_text(kind, product)))
     if not jobs:
         return
     section("Markers")
-    say(f"  Adding sanity and regression markers for {milestone}.", "cyan", log=True)
+    say(f"  Adding NCP and SoC sanity and regression markers for {milestone}.", "cyan", log=True)
     stamp_case_markers(milestone, jobs)
     CLONED_THIS_SESSION.add(milestone)
 
@@ -819,24 +825,24 @@ def collect_config_findings():
     if not str(SANITY_CONFIG.get("path") or "").strip():
         errors.append("SANITY_CONFIG path is empty.")
 
-    latest = _config_file_name(BUILD_CONFIG.get("rps_filename"))
-    previous = _config_file_name(BUILD_CONFIG.get("http_url"))
-    details = _config_file_name(BUILD_DETAILS.get("firmware"))
-    if latest and details and latest != details:
-        warnings.append(
-            f"BUILD_DETAILS firmware is {details}, while the latest firmware in BUILD_CONFIG is {latest}."
-        )
-    for firmware in (latest, previous):
-        if not firmware:
-            continue
-        missing_roots = [
-            folder_name
-            for folder_name in RESOURCE_LAYOUT.values()
-            if not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware))
-        ]
-        if missing_roots:
-            located = ", ".join(f"Resources\\{name}" for name in missing_roots)
-            warnings.append(f"{firmware} is missing from {located}")
+    for product, folder_name in RESOURCE_LAYOUT.items():
+        config = build_config_for(product)
+        latest = _config_file_name(config.get("rps_filename"))
+        previous = _config_file_name(config.get("http_url"))
+        details = _config_file_name(build_details_for(product).get("firmware"))
+        if latest and details and latest != details:
+            warnings.append(
+                f"{product}: BUILD_DETAILS firmware is {details}, while the latest firmware is {latest}."
+            )
+        for firmware in (latest, previous):
+            if firmware and not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware)):
+                warnings.append(f"{firmware} is missing from Resources\\{folder_name}")
+    if "SoC" in RESOURCE_LAYOUT:
+        import soc_secure
+        if not soc_secure.script_path():
+            warnings.append(f"SoC secure script was not found: {SOC_SECURE.get('script')}")
+        if not soc_secure.find_commander():
+            warnings.append("Simplicity Commander was not found for the SoC secure files (set COMMANDER_PATH in wlan_runner.local.env).")
 
     if not [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]:
         warnings.append("EMAIL_SETTINGS has no To recipients, so result mail cannot be sent.")
@@ -897,15 +903,21 @@ def select_product_and_setup():
 
 
 def select_manifest():
+    if CURRENT_PRODUCT == "SoC" and CURRENT_SETUP in SOC_SECURE["setup_ids"]:
+        names = soc_manifest_names(CURRENT_SETUP)
+        options = [(str(index), name) for index, name in enumerate(names, start=1)]
+        choice = choose("Manifest", options, allow_quit=False)
+        return names[int(choice) - 1]
     options = [(key, name) for key, name in MANIFEST_OPTIONS.items()]
     choice = choose("Manifest", options, allow_quit=False)
     return MANIFEST_OPTIONS[str(choice)]
 
 
-def marker_text(key):
+def marker_text(key, product=None):
+    """Marker name for a key. NCP and SoC use different names."""
     if not key:
         return None
-    return PYTEST_MARKERS.get(key, key)
+    return markers_for(product or CURRENT_PRODUCT).get(key, key)
 
 
 def resolve_marker(category, plan):
@@ -918,12 +930,19 @@ def resolve_marker(category, plan):
     return marker_text(key)
 
 
+def sanity_manifest():
+    """Manifest for sanity, connectivity and custom runs."""
+    if CURRENT_PRODUCT == "SoC":
+        return default_manifest_for(CURRENT_PRODUCT, CURRENT_SETUP)
+    return SANITY_CONFIG["manifest"]
+
+
 def resolve_manifest(category, plan):
     if plan.get("manifest"):
         return plan["manifest"]
     if category and category.get("default_manifest"):
         return category["default_manifest"]
-    return MANIFEST_OPTIONS.get("1", "manifest_917_ncp.yaml")
+    return default_manifest_for(CURRENT_PRODUCT, CURRENT_SETUP)
 
 
 def build_pytest_command(path, marker=None, extra_args=None):
@@ -1249,7 +1268,7 @@ def aggregate_run_results(report_files):
     return {
         "date": datetime.now().strftime("%d-%b-%Y"),
         "milestone": CURRENT_MILESTONE or "UNKNOWN",
-        "firmware": BUILD_DETAILS.get("firmware", "UNKNOWN"),
+        "firmware": build_details_for(CURRENT_PRODUCT).get("firmware", "UNKNOWN"),
         "runtime": "N/A",
         "harness": harness or "UNKNOWN",
         "setup": CURRENT_SETUP or "UNKNOWN",
@@ -1258,9 +1277,9 @@ def aggregate_run_results(report_files):
         "failed": failed,
         "errors": errors,
         "total": passed + failed + errors,
-        "build": BUILD_DETAILS.get("build", "UNKNOWN"),
-        "compiler": BUILD_DETAILS.get("compiler", "UNKNOWN"),
-        "stack": BUILD_DETAILS.get("stack", "UNKNOWN"),
+        "build": build_details_for(CURRENT_PRODUCT).get("build", "UNKNOWN"),
+        "compiler": build_details_for(CURRENT_PRODUCT).get("compiler", "UNKNOWN"),
+        "stack": build_details_for(CURRENT_PRODUCT).get("stack", "UNKNOWN"),
         "report_name": "",
         "status": status_from_counts(passed, failed, errors),
         "attachment_count": 1,
@@ -1495,9 +1514,25 @@ def prepare_tool(script_name, *args):
     write_log(f"{script_name} completed")
 
 
+def secure_firmware_names():
+    """secure_<firmware>_<id>.rps for the latest and old SoC firmware."""
+    secure_id = SOC_SECURE["setup_ids"].get(CURRENT_SETUP, "")
+    config = build_config_for("SoC")
+    names = []
+    for key in ("rps_filename", "http_url"):
+        name = os.path.basename(str(config.get(key) or "").strip("/\\"))
+        if name.lower().endswith(".rps"):
+            name = name[:-4]
+        names.append(f"secure_{name}_{secure_id}.rps")
+    return names
+
+
 def place_firmware_files(milestone):
-    latest_fw = BUILD_CONFIG["rps_filename"].replace("/", "")
-    old_fw = BUILD_CONFIG["http_url"].replace("/", "")
+    if CURRENT_PRODUCT == "SoC":
+        latest_fw, old_fw = secure_firmware_names()
+    else:
+        latest_fw = BUILD_CONFIG["rps_filename"].replace("/", "")
+        old_fw = BUILD_CONFIG["http_url"].replace("/", "")
     destination = os.path.join(utf_wifi_path(milestone), "common", "www")
     os.makedirs(destination, exist_ok=True)
     resource_root = get_resource_root()
@@ -1726,10 +1761,20 @@ def prepare_execution_environment(unattended=False):
     else:
         ask_pi_reboot()
     write_log(f"Environment preparation started for {CURRENT_MILESTONE} {CURRENT_SETUP}")
-    prepare_tool("harness_updater.py", CURRENT_SETUP)
-    say("  Harness ready", "green")
-    prepare_tool("manifest_updater.py")
-    say("  Manifest ready", "green")
+    if CURRENT_PRODUCT == "SoC":
+        # SoC has its own scripts: the firmware and test agents are signed
+        # first, then the harness and the manifests are built from them.
+        prepare_tool("soc_secure.py", CURRENT_SETUP)
+        say("  Secure firmware and test agents ready", "green")
+        prepare_tool("soc_harness_updater.py", CURRENT_SETUP)
+        say("  Harness ready", "green")
+        prepare_tool("soc_manifest_updater.py", CURRENT_SETUP)
+        say("  Manifest ready", "green")
+    else:
+        prepare_tool("harness_updater.py", CURRENT_SETUP)
+        say("  Harness ready", "green")
+        prepare_tool("manifest_updater.py")
+        say("  Manifest ready", "green")
     place_firmware_files(CURRENT_MILESTONE)
     place_tests_folder(CURRENT_MILESTONE)
     update_settings_defaults(CURRENT_MILESTONE, job_type)
@@ -1807,7 +1852,7 @@ def record_campaign(executed):
             if entry is None:
                 entry = {
                     "plan": item["name"],
-                    "manifest": item.get("manifest") or SANITY_CONFIG["manifest"],
+                    "manifest": item.get("manifest") or sanity_manifest(),
                     "duration": item.get("duration", ""),
                     "returncode": item.get("returncode"),
                 }
@@ -2199,7 +2244,7 @@ def sanity_test():
         "path": SANITY_CONFIG["path"],
         "marker": SANITY_CONFIG.get("marker"),
         "extra_args": SANITY_CONFIG.get("extra_args"),
-        "manifest": SANITY_CONFIG["manifest"],
+        "manifest": sanity_manifest(),
     })
     execute_plans([plan])
 
@@ -2316,7 +2361,7 @@ def custom_test():
             "path": SANITY_CONFIG["path"],
             "marker": marker,
             "extra_args": SANITY_CONFIG.get("extra_args"),
-            "manifest": SANITY_CONFIG["manifest"],
+            "manifest": sanity_manifest(),
         })
         execute_plans([plan])
     finally:
@@ -2379,10 +2424,10 @@ def send_failure_mail(title, message):
             "milestone": CURRENT_MILESTONE or "UNKNOWN",
             "product_type": CURRENT_PRODUCT or "UNKNOWN",
             "setup": CURRENT_SETUP or "UNKNOWN",
-            "firmware": BUILD_DETAILS.get("firmware", "UNKNOWN"),
-            "build": BUILD_DETAILS.get("build", "UNKNOWN"),
-            "compiler": BUILD_DETAILS.get("compiler", "UNKNOWN"),
-            "stack": BUILD_DETAILS.get("stack", "UNKNOWN"),
+            "firmware": build_details_for(CURRENT_PRODUCT).get("firmware", "UNKNOWN"),
+            "build": build_details_for(CURRENT_PRODUCT).get("build", "UNKNOWN"),
+            "compiler": build_details_for(CURRENT_PRODUCT).get("compiler", "UNKNOWN"),
+            "stack": build_details_for(CURRENT_PRODUCT).get("stack", "UNKNOWN"),
             "runtime": script_runtime_text(),
             "total": 0,
             "passed": 0,

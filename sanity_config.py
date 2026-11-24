@@ -78,12 +78,12 @@ EXECUTION_CONFIG = {
     "8B": {
         "display_name": "8B (PDU_2AP_2Raspi)",
         "target_ip": "10.207.18.24",
-        "harness": "harness_example_SOC_Need_to_update.yaml"
+        "harness": "harness_example_si917_sdk_8B_PDU_2RASPI.yaml"
     },
     "8C": {
         "display_name": "8C (PDU_2EVK_2AP_4Raspi)",
         "target_ip": "10.207.18.214",
-        "harness": "harness_example_SOC_Need_to_update.yaml"
+        "harness": "harness_example_si917_sdk_2AP_4RASPI_8C_2EVK.yaml"
     },
     "9A": {
         "display_name": "9A (PDU_Multi-Raspi)",
@@ -93,17 +93,17 @@ EXECUTION_CONFIG = {
     "9B": {
         "display_name": "9B (PDU_2EVK_2Raspi)",
         "target_ip": "10.207.18.61",
-        "harness": "harness_example_SOC_Need_to_update.yaml"
+        "harness": "harness_example_si917_sdk_9B_2EVK.yaml"
     },
     "10A": {
         "display_name": "10A (PDU_2Raspi)",
         "target_ip": "10.207.18.148",
-        "harness": "harness_example_SOC_Need_to_update.yaml"
+        "harness": "harness_example_si917_sdk_10A.yaml"
     },
     "10C": {
         "display_name": "10C (PDU_2Raspi)",
         "target_ip": "10.207.18.29",
-        "harness": "harness_example_SOC_Need_to_update.yaml"
+        "harness": "harness_example_si917_sdk_10C.yaml"
     },
     "23A": {
         "display_name": "23A",
@@ -135,17 +135,38 @@ MANIFEST_OPTIONS = {
 # Change marker names here only. Plans reference keys below.
 # ============================================================
 
-PYTEST_MARKERS = {
-    # Sanity suite marker
-    "sanity": "SANITY_RUN", #WLAN_Dev_sanity_917",
+# NCP and SoC use different marker names, so one product's case list never
+# selects the other product's cases in the same clone.
+PYTEST_MARKERS_BY_PRODUCT = {
+    "NCP": {
+        # Sanity suite marker
+        "sanity": "NCP_SANITY_RUN",
 
-    # Main closed-env regression marker
-    "regression": "REGRESSION_RUN",
+        # Main closed-env regression marker
+        "regression": "NCP_REGRESSION_RUN",
 
-    #Custom markers for rerun
-    "custom": "CUSTOM_RUN_413IFC3"
+        # Custom marker for rerun (a timestamp is appended per run)
+        "custom": "NCP_CUSTOM_RUN_413IFC3"
+    },
+    "SoC": {
+        # Sanity suite marker
+        "sanity": "SOC_SANITY_RUN",
 
+        # Main closed-env regression marker
+        "regression": "SOC_REGRESSION_RUN",
+
+        # Custom marker for rerun (a timestamp is appended per run)
+        "custom": "SOC_CUSTOM_RUN_413IFC3"
+    },
 }
+
+# Kept for older scripts: the NCP names.
+PYTEST_MARKERS = PYTEST_MARKERS_BY_PRODUCT["NCP"]
+
+
+def markers_for(product):
+    """Marker names for a product. Unknown products use the NCP names."""
+    return PYTEST_MARKERS_BY_PRODUCT.get(product) or PYTEST_MARKERS
 
 # Shared pytest / launch defaults
 PYTEST_DEFAULTS = {
@@ -933,6 +954,460 @@ REGRESSION_PLANS = {
             ],
         },
     },
+    # ---- SoC (from the SoC launch files; connectivity and sanity are shared) ----
+    "8B": {
+        "regression": {
+            "label": "Regression (Closed Env)",
+            "marker": "regression",
+            "default_manifest": "manifest_917_soc_8B.yaml",
+            "plans": [
+                {
+                    "name": "secure_ota_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_secure_ota_wifi_sdk.py",
+                    "manifest": "manifest_917_soc_secure_8B.yaml",
+                },
+                {
+                    "name": "wpa3_functional",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa3_functional_sdk.py",
+                },
+                {
+                    "name": "wpa3_enhancements_sdk_APs",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa3_enhancements_sdk_APs.py",
+                },
+                {
+                    "name": "wlan_bg_scan",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_wlan_bg_scan_sdk.py",
+                },
+                {
+                    "name": "wlan_storeconfig_autojoin",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_wlan_storeconfig_autojoin_sdk.py",
+                },
+                {
+                    "name": "wlan_pmf_11w",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wlan_pmf_11w_sdk.py",
+                },
+                {
+                    "name": "wpa2_enterprise_bypass",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa2_enterprise_bypass_sdk.py",
+                },
+                {
+                    "name": "wpa2_enterprise",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa2_enterprise_sdk.py",
+                },
+                {
+                    "name": "wpa2_enterprise_with_diff_ciphers",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa2_enterprise_with_diff_ciphers_sdk.py",
+                },
+                {
+                    "name": "wlan_sta_enterprise",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wlan_sta_enterprise_sdk.py",
+                },
+                {
+                    "name": "wpa3_enterprise",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa3_enterprise_sdk.py",
+                },
+                {
+                    "name": "rtc_sta",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/request_timeout_and_rtc_timer/test_rtc_sta_wifi_sqa_sdk.py",
+                },
+                {
+                    "name": "request_timeout",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/request_timeout_and_rtc_timer/test_request_timeout_sdk.py",
+                },
+                {
+                    "name": "rtc_ap",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/request_timeout_and_rtc_timer/test_rtc_ap_wifi_sqa_sdk.py",
+                },
+                {
+                    "name": "tcp_udp_multi_socket_thread",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_tcp_udp_multi_socket_thread_sdk.py",
+                },
+                {
+                    "name": "dns_resolution",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/dhcp_and_dns/test_dns_resolution_sdk.py",
+                },
+            ],
+        },
+        "open_box": {
+            "label": "Open Box (Open Env)",
+            "marker": None,
+            "default_manifest": "manifest_917_soc_8B.yaml",
+            "plans": [
+                {
+                    "name": "scan_2_4_c662089",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_scan_2_4_sdk.py::test_wifi_sdk_scan_type_extended_enabled_in_China_region_c662089",
+                    "use_marker": False,
+                },
+                {
+                    "name": "scan_2_4_c653150",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_scan_2_4_sdk.py::test_wifi_sdk_scan_type_extended_enabled_c653150",
+                    "use_marker": False,
+                },
+            ],
+        },
+    },
+    "8C": {
+        "regression": {
+            "label": "Regression (Closed Env)",
+            "marker": "regression",
+            "default_manifest": "manifest_917_soc_8C.yaml",
+            "plans": [
+                {
+                    "name": "wlan_concurrent_multi_client",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_wlan_concurrent_multi_client_sdk.py",
+                },
+                {
+                    "name": "websocket_concurrent",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_websocket_concurrent_sdk.py",
+                },
+                {
+                    "name": "start_and_stop_soft_ap",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_start_and_stop_soft_ap.py",
+                },
+                {
+                    "name": "tea_wlan_concurrent",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_tea_wlan_concurrent_sdk.py",
+                },
+                {
+                    "name": "wlan_concurrent",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_wlan_concurrent_sdk.py",
+                },
+                {
+                    "name": "11ax_concurrent",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_11ax_concurrent_sdk.py",
+                },
+                {
+                    "name": "wlan_concurrent_http_server",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_wlan_concurrent_http_server_sdk.py",
+                },
+                {
+                    "name": "apmode",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_apmode_sdk.py",
+                },
+                {
+                    "name": "apmode_network_stack_l1_and_l2",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_apmode_network_stack_l1_and_l2_sdk.py",
+                },
+                {
+                    "name": "ip_conflict",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/dhcp_and_dns/test_ip_conflict_sdk.py",
+                },
+                {
+                    "name": "tcp_udp_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_tcp_udp_wifi_sdk.py",
+                },
+                {
+                    "name": "wlan_mbssid",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mbssid/test_wlan_mbssid_sdk.py",
+                },
+                {
+                    "name": "azure_mqtt",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/cloud_connectivity/test_azure_mqtt_sdk.py",
+                },
+                {
+                    "name": "2ap_scan_join",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_2ap_scan_join_sdk.py",
+                },
+                {
+                    "name": "host_mqtt",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mqtt/test_host_mqtt_sdk.py",
+                    "manifest": "manifest_917_soc_8C_PAHO.yaml",
+                },
+                {
+                    "name": "mqtt_on_host_lwip",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mqtt/test_mqtt_on_host_lwip_sdk.py",
+                },
+                {
+                    "name": "wlan_sta_lwip_default_timer",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/lwip/test_wlan_sta_lwip_default_timer_sdk.py",
+                },
+                {
+                    "name": "wlan_sta_lwip_optimized_timer",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/lwip/test_wlan_sta_lwip_optimized_timer_sdk.py",
+                },
+            ],
+        },
+    },
+    "9B": {
+        "regression": {
+            "label": "Regression (Closed Env)",
+            "marker": "regression",
+            "default_manifest": "manifest_917_soc_9B.yaml",
+            "plans": [
+                {
+                    "name": "apmode",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_apmode_sdk.py",
+                },
+                {
+                    "name": "ap_ble_provisioning_softap",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/softap_provisioning/test_ap_ble_provisioning_softap_sdk.py",
+                    "manifest": "manifest_917_soc_9B_MEM2.yaml",
+                },
+                {
+                    "name": "wlan_provision_via_ap",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_wlan_provision_via_ap_sdk.py",
+                },
+                {
+                    "name": "apmode_scan",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_apmode_scan_sdk.py",
+                },
+                {
+                    "name": "apmode_2evk",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_apmode_2evk.py",
+                },
+                {
+                    "name": "wpa3_aput_mode",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_wpa3_aput_mode_sdk.py",
+                },
+                {
+                    "name": "wpa3_concurrent_mode",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/concurrent_mode/test_wpa3_concurrent_mode_sdk.py",
+                },
+                {
+                    "name": "multicast",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_multicast_wifi_sqa_sdk.py",
+                },
+                {
+                    "name": "wifi_sntp",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mdns_and_sntp/test_wifi_sntp_sdk.py",
+                },
+                {
+                    "name": "wmm_qos",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_wmm_qos_sdk.py",
+                },
+                {
+                    "name": "dhcp",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/dhcp_and_dns/test_dhcp_sdk.py",
+                },
+                {
+                    "name": "wreck_vulnerability",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/wreck_vulnerability/test_wreck_vulnerability_sdk.py",
+                },
+                {
+                    "name": "socket_select",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_socket_select_sdk.py",
+                },
+                {
+                    "name": "wlan_config_ga",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_wlan_config_ga_sdk.py",
+                },
+                {
+                    "name": "scan_2_4",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_scan_2_4_sdk.py",
+                },
+                {
+                    "name": "join_2_4",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_join_2_4_sdk.py",
+                },
+                {
+                    "name": "vs_ie",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ap_mode/test_vs_ie_sdk.py",
+                },
+                {
+                    "name": "twt_sta",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/twt/test_twt_sta_sdk.py",
+                },
+                {
+                    "name": "reschedule_twt_sta",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/twt/test_reschedule_twt_sta_sdk.py",
+                },
+                {
+                    "name": "wlan_itwt_autoconfig",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/twt/test_wlan_itwt_autoconfig_sdk.py",
+                },
+                {
+                    "name": "mqtt",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mqtt/test_mqtt_sdk.py",
+                },
+                {
+                    "name": "aws_iot",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/cloud_connectivity/test_aws_iot_wifi_sqa_sdk.py",
+                },
+                {
+                    "name": "https_otaf_rejoin_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_https_otaf_rejoin_wifi_sdk.py",
+                },
+                {
+                    "name": "http_otaf",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_http_otaf_sdk.py",
+                },
+                {
+                    "name": "https_otaf_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_https_otaf_wifi_sdk.py",
+                },
+                {
+                    "name": "https_otaf_cloud_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_https_otaf_cloud_wifi_sdk.py",
+                },
+                {
+                    "name": "http_https_otaf_sdk_stress",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/firmware_upgrade/test_http_https_otaf_sdk_stress.py",
+                },
+            ],
+        },
+    },
+    "10A": {
+        "regression": {
+            "label": "Regression (Closed Env)",
+            "marker": "regression",
+            "default_manifest": "manifest_917_soc_10A.yaml",
+            "plans": [
+                {
+                    "name": "wlan_powersave_traffic",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/powersave/test_wlan_powersave_traffic_sdk.py",
+                },
+                {
+                    "name": "mdns_ipv6",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mdns_and_sntp/test_mdns_ipv6_sdk.py",
+                },
+                {
+                    "name": "mdns",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/mdns_and_sntp/test_mdns_sdk.py",
+                },
+                {
+                    "name": "wlan_data_rates",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_wlan_data_rates_sdk.py",
+                },
+                {
+                    "name": "https_file_download",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_https_file_download_sdk.py",
+                },
+                {
+                    "name": "dns_server",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/dhcp_and_dns/test_dns_server_sdk.py",
+                },
+                {
+                    "name": "wlan_csa",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_wlan_csa_sdk.py",
+                },
+                {
+                    "name": "websocket",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/websocket/test_websocket_sdk.py",
+                },
+                {
+                    "name": "wlan_rejoin_2G",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/rejoin/test_wlan_rejoin_2G_sdk.py",
+                },
+                {
+                    "name": "ipv6_ipv4",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ipv6/test_ipv6_ipv4_sdk.py",
+                },
+                {
+                    "name": "ipv6",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ipv6/test_ipv6_sdk.py",
+                },
+                {
+                    "name": "dtls_functionality",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/dtls/test_dtls_functionality_sdk.py",
+                },
+                {
+                    "name": "wlan_max_psp_functionality",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/powersave/test_wlan_max_psp_functionality_sdk.py",
+                },
+                {
+                    "name": "http_server",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_http_server_sdk.py",
+                },
+                {
+                    "name": "http_put",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_http_put_sdk.py",
+                },
+                {
+                    "name": "https_post",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_https_post_sdk.py",
+                },
+                {
+                    "name": "https_get",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_https_get_sdk.py",
+                },
+                {
+                    "name": "http_https_get_post",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/http_https/test_http_https_get_post_sdk.py",
+                },
+            ],
+        },
+    },
+    "10C": {
+        "regression": {
+            "label": "Regression (Closed Env)",
+            "marker": "regression",
+            "default_manifest": "manifest_917_soc_10C.yaml",
+            "plans": [
+                {
+                    "name": "wpa3_enhancements",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/security_enhancements/test_wpa3_enhancements_sdk.py",
+                },
+                {
+                    "name": "ssl_functionality",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ssl/test_ssl_functionality_sdk.py",
+                },
+                {
+                    "name": "ssl_advertize_ciphers_rsa_ecdsa",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ssl/test_ssl_advertize_ciphers_rsa_ecdsa_sdk.py",
+                },
+                {
+                    "name": "ssl_client_legacy",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ssl/test_ssl_client_legacy_wifi_sqa_sdk.py",
+                },
+                {
+                    "name": "ssl_dynamic_load_cert_wifi",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/ssl/test_ssl_dynamic_load_cert_wifi_sdk.py",
+                },
+                {
+                    "name": "wlan_maxpsp_enhanced_maxpsp",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/powersave/test_wlan_maxpsp_enhanced_maxpsp_sdk.py",
+                },
+                {
+                    "name": "wlan_sta_passive_scan_functionality",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/scan_2_4ghz/test_wlan_sta_passive_scan_functionality_sdk.py",
+                },
+                {
+                    "name": "iot_socket",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_iot_socket_sdk.py",
+                },
+                {
+                    "name": "wlan_join_wireless_information",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_wlan_join_wireless_information_sdk.py",
+                },
+                {
+                    "name": "11ax_aggregation",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_11ax_aggregation_sdk.py",
+                },
+                {
+                    "name": "wmm_aggregation",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/tcp_udp/test_wmm_aggregation_sdk.py",
+                },
+                {
+                    "name": "get_nwp_config",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/nwp_config/test_get_nwp_config_sdk.py",
+                },
+                {
+                    "name": "wps_pbc",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/join_2_4ghz/test_wps_pbc_sdk.py",
+                },
+                {
+                    "name": "wifi_sdk_aes",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/new_security_accelarator/test_wifi_sdk_aes.py",
+                },
+                {
+                    "name": "wifi_sdk_aes_enc",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/new_security_accelarator/test_wifi_sdk_aes_enc.py",
+                },
+                {
+                    "name": "wifi_sdk_ecdh",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/new_security_accelarator/test_wifi_sdk_ecdh.py",
+                },
+                {
+                    "name": "wifi_sdk_sha",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/new_security_accelarator/test_wifi_sdk_sha.py",
+                },
+                {
+                    "name": "wifi_sdk_hmac",
+                    "path": "example_test_package/sqa_test_suites_wifi_sdk_3/wlan_standalone/functional/new_security_accelarator/test_wifi_sdk_hmac.py",
+                },
+            ],
+        },
+    },
 }
 
 # Values written into the milestone's utf_wifi\config\settings_defaults.env.
@@ -1040,12 +1515,6 @@ HARNESS_PRECONDITIONS = {
         "defaults.iot_sockets.port":
             "8989",
 
-        # Firmware
-        "defaults.rps_filename.value":
-            BUILD_CONFIG["rps_filename"],
-
-        "defaults.http_url":
-            BUILD_CONFIG["http_url"]
     },
 
     "23B": {
@@ -1104,12 +1573,6 @@ HARNESS_PRECONDITIONS = {
         "defaults.iot_sockets.port":
             "8989",
 
-        # Firmware
-        "defaults.rps_filename.value":
-            BUILD_CONFIG["rps_filename"],
-
-        "defaults.http_url":
-            BUILD_CONFIG["http_url"]
     },
 
     "9A": {
@@ -1187,12 +1650,6 @@ HARNESS_PRECONDITIONS = {
         "defaults.iot_sockets.port":
             "6666",
 
-        # Firmware
-        "defaults.rps_filename.value":
-            BUILD_CONFIG["rps_filename"],
-
-        "defaults.http_url":
-            BUILD_CONFIG["http_url"]
     },
 
     "8A": {
@@ -1265,12 +1722,6 @@ HARNESS_PRECONDITIONS = {
         "defaults.iot_sockets.port":
             "6666",
 
-        # Firmware
-        "defaults.rps_filename.value":
-            BUILD_CONFIG["rps_filename"],
-
-        "defaults.http_url":
-            BUILD_CONFIG["http_url"]
     }
 }
 
@@ -1284,6 +1735,161 @@ BUILD_DETAILS = {
 
     "stack": "917"
 }
+
+# ============================================================
+# SoC
+# SoC firmware and test agents are signed and encrypted, and SoC has its own
+# manifests, markers and plans. Connectivity, sanity, harness handling and the
+# preconditions code are shared with NCP. Place the firmware, test agents and
+# tests folder in Resources\SoC.
+# ============================================================
+
+# Firmware kept in Resources\SoC. The runner creates secure_<name>_<id>.rps
+# from these two files.
+SOC_BUILD_CONFIG = {
+    "rps_filename": "/SiWG917-B.2.17.6.0.0.83.rps",  # latest FW
+    "http_url": "/SiWG917-B.2.17.6.0.0.77.rps",      # old FW (OTA)
+}
+
+SOC_SECURE = {
+    # Holds the "commander rps convert" commands for every SoC setup, one
+    # block per setup under a "REM <setup>" line. Keys stay in that file.
+    "script": r"C:\Users\prkattup\Downloads\SOC_Automation_files_backup\SOC_ALL_generate_secure_test_agent_files_txt.txt",
+    # Number every secure file name of a setup ends with: secure_<name>_<id>.rps
+    "setup_ids": {
+        "8B": "845",
+        "8C": "625",
+        "9B": "215",
+        "10A": "671",
+        "10C": "056",
+    },
+}
+
+# ============================================================
+# SHARED PER-PRODUCT LOOKUPS (NCP and SoC)
+# One place for everything that differs by product, so the runner and the
+# updater scripts do not repeat NCP / SoC branches.
+# ============================================================
+
+PRODUCT_BUILD_CONFIG = {
+    "NCP": BUILD_CONFIG,
+    "SoC": SOC_BUILD_CONFIG,
+}
+
+# Files the milestone clone ships. The harness updater adds the keys a setup
+# harness is missing from "harness" (utf_wifi\config\harnesses). The manifest
+# updaters build every setup manifest from "manifest" (utf_wifi\manifest).
+PRODUCT_DEFAULT_FILES = {
+    "NCP": {
+        "harness": "harness_example_ncp_si917_sdk.yaml",
+        "manifest": MANIFEST_FILES["standard"],
+    },
+    "SoC": {
+        "harness": "harness_example_si917_sdk.yaml",
+        "manifest": "manifest_917_soc.yaml",
+        "secure_manifest": "manifest_917_soc_secure.yaml",
+    },
+}
+
+
+def file_stem(name):
+    """File name without folders and without the .rps extension."""
+    base = str(name or "").strip().strip("/\\").replace("\\", "/").split("/")[-1]
+    return base[:-4] if base.lower().endswith(".rps") else base
+
+
+def build_config_for(product):
+    return PRODUCT_BUILD_CONFIG.get(product, BUILD_CONFIG)
+
+
+def firmware_names(product):
+    """(latest, old) firmware file names of a product, as kept in Resources."""
+    config = build_config_for(product)
+    return tuple(
+        str(config.get(key) or "").strip().strip("/\\").replace("\\", "/").split("/")[-1]
+        for key in ("rps_filename", "http_url")
+    )
+
+
+# Mail details. SoC shows the SoC latest firmware, the rest is shared.
+SOC_BUILD_DETAILS = dict(BUILD_DETAILS, firmware=firmware_names("SoC")[0])
+
+PRODUCT_BUILD_DETAILS = {
+    "NCP": BUILD_DETAILS,
+    "SoC": SOC_BUILD_DETAILS,
+}
+
+
+def build_details_for(product):
+    return PRODUCT_BUILD_DETAILS.get(product, BUILD_DETAILS)
+
+
+def secure_firmware_names(setup):
+    """secure_<firmware>_<id>.rps for the latest and old SoC firmware."""
+    secure_id = SOC_SECURE["setup_ids"].get(setup, "")
+    return [f"secure_{file_stem(name)}_{secure_id}.rps" for name in firmware_names("SoC")]
+
+
+def firmware_files_for(product, setup):
+    """Firmware files the runner copies for a run: (latest, old)."""
+    if product == "SoC":
+        return secure_firmware_names(setup)
+    return list(firmware_names(product))
+
+
+def soc_manifest_names(setup):
+    """Manifests a SoC setup can use. The first one is the standard manifest."""
+    return [
+        f"manifest_917_soc_{setup}.yaml",
+        f"manifest_917_soc_{setup}_PAHO.yaml",
+        f"manifest_917_soc_{setup}_MEM2.yaml",
+        f"manifest_917_soc_secure_{setup}.yaml",
+    ]
+
+
+def firmware_preconditions(product, setup):
+    """Firmware lines the runner writes into a setup harness.
+
+    NCP names the firmware plainly. SoC uses the secure files made for the
+    setup. Everything else in the harness comes from the previous milestone or
+    Resources.
+    """
+    if product == "SoC":
+        secure_id = SOC_SECURE["setup_ids"][setup]
+        latest, old = firmware_names(product)
+        return {
+            "constants.rps_filename.value":
+                f"secure_{file_stem(latest)}_{secure_id}.rps",
+
+            "defaults.wifi.http_url":
+                f"/secure_{file_stem(old)}_{secure_id}.rps",
+
+            "devices.tcp_server.interfaces.server.firmware_file_name":
+                f"encrypted_1_{latest}",
+        }
+    return {
+        "defaults.rps_filename.value": BUILD_CONFIG["rps_filename"],
+        "defaults.http_url": BUILD_CONFIG["http_url"],
+    }
+
+
+# Same rule for both products: values written above the harness values that
+# were typed in HARNESS_PRECONDITIONS for the setup, which still win.
+for _product, _setups in PRODUCT_SETUPS.items():
+    if _product == "SoC":
+        _setups = [setup for setup in _setups if setup in SOC_SECURE["setup_ids"]]
+    for _setup in _setups:
+        _entry = HARNESS_PRECONDITIONS.setdefault(_setup, {})
+        for _key, _value in firmware_preconditions(_product, _setup).items():
+            _entry.setdefault(_key, _value)
+
+
+def default_manifest_for(product, setup):
+    """Manifest used when a plan does not name one."""
+    if product == "SoC" and setup in SOC_SECURE["setup_ids"]:
+        return soc_manifest_names(setup)[0]
+    return MANIFEST_OPTIONS.get("1", "manifest_917_ncp.yaml")
+
 
 EMAIL_SETTINGS = {
 
