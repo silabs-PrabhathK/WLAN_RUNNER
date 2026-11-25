@@ -853,8 +853,91 @@ def _config_file_name(value):
     return os.path.basename(str(value or "").replace("\\", "/").strip())
 
 
-def collect_config_findings():
-    """Return (errors, warnings) for the lab config on this PC."""
+def product_findings(product, setup=None):
+    """Warnings about the files one product needs on this PC.
+
+    They are shown when that product is selected (and by --check), so NCP never
+    lists SoC items and the other way round. For SoC the signing keys are
+    checked for the selected setup only (every setup when none is given)."""
+    warnings = []
+    folder_name = RESOURCE_LAYOUT.get(product)
+    if not folder_name:
+        return warnings
+    config = build_config_for(product)
+    latest = _config_file_name(config.get("rps_filename"))
+    previous = _config_file_name(config.get("http_url"))
+    details = _config_file_name(build_details_for(product).get("firmware"))
+    if latest and details and latest != details:
+        warnings.append(
+            f"{product}: BUILD_DETAILS firmware is {details}, while the latest firmware is {latest}."
+        )
+    for firmware in (latest, previous):
+        if firmware and not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware)):
+            warnings.append(f"{firmware} is missing from Resources\\{folder_name}")
+    resource_dir = os.path.join(RESOURCES_FOLDER, folder_name)
+    if not os.path.isdir(os.path.join(resource_dir, "tests")):
+        warnings.append(
+            f"Tests folder is missing from Resources\\{folder_name}; "
+            "the milestone would keep its own tests folder."
+        )
+
+    if product == "NCP":
+        has_agent = os.path.isdir(resource_dir) and any(
+            name.lower().endswith(".hex")
+            for name in os.listdir(resource_dir)
+        )
+        if not has_agent:
+            warnings.append(f"No test agent (*.hex) in Resources\\{folder_name}")
+    else:
+        has_agent = os.path.isdir(resource_dir) and any(
+            "test_agent" in name.lower() and name.lower().endswith(".rps")
+            for name in os.listdir(resource_dir)
+        )
+        if not has_agent:
+            warnings.append(f"No test agent (*test_agent*.rps) in Resources\\{folder_name}")
+
+    if product == "SoC":
+        import soc_secure
+        import soc_manifest_updater
+        plain_agents = soc_manifest_updater.plain_files()
+        if plain_agents:
+            unmatched = soc_manifest_updater.unmatched_markers(plain_agents)
+            if unmatched:
+                warnings.append(
+                    "SoC test agent not found for: " + ", ".join(unmatched)
+                    + " (those manifest entries keep the default agent)"
+                )
+        if not soc_secure.script_path():
+            warnings.append(f"SoC secure script was not found: {SOC_SECURE.get('script')}")
+        if not soc_secure.commander_folder():
+            warnings.append(
+                "SoC Commander folder was not found, so another commander is used. Newer commander "
+                "versions refuse to sign the firmware (set SOC_COMMANDER_FOLDER in wlan_runner.local.env)."
+            )
+        if not soc_secure.find_commander():
+            warnings.append("Simplicity Commander was not found for the SoC secure files (set SOC_COMMANDER_FOLDER in wlan_runner.local.env).")
+        setup_ids = SOC_SECURE.get("setup_ids", {})
+        wanted = {setup: setup_ids[setup]} if setup in setup_ids else setup_ids
+        for setup_name, secure_id in wanted.items():
+            absent = [
+                key for key in (f"ta_private_key_{secure_id}.pem", f"m4_private_key_{secure_id}.pem")
+                if not soc_secure.find_key(key)
+            ]
+            if absent:
+                warnings.append(f"SoC {setup_name}: signing key missing from SoC_Secure\\keys: {', '.join(absent)}")
+    return warnings
+
+
+def note_product_warnings(product, setup):
+    for item in product_findings(product, setup):
+        say(f"  {item}", "yellow", log=True)
+
+
+def collect_config_findings(products=()):
+    """Return (errors, warnings) for the lab config on this PC.
+
+    Only the settings shared by NCP and SoC are checked, plus the files of the
+    products named in products (--check passes them all)."""
     errors = []
     warnings = []
     if not EXECUTION_CONFIG:
@@ -921,73 +1004,8 @@ def collect_config_findings():
     if not str(SANITY_CONFIG.get("path") or "").strip():
         errors.append("SANITY_CONFIG path is empty.")
 
-    for product, folder_name in RESOURCE_LAYOUT.items():
-        config = build_config_for(product)
-        latest = _config_file_name(config.get("rps_filename"))
-        previous = _config_file_name(config.get("http_url"))
-        details = _config_file_name(build_details_for(product).get("firmware"))
-        if latest and details and latest != details:
-            warnings.append(
-                f"{product}: BUILD_DETAILS firmware is {details}, while the latest firmware is {latest}."
-            )
-        for firmware in (latest, previous):
-            if firmware and not os.path.isfile(os.path.join(RESOURCES_FOLDER, folder_name, firmware)):
-                warnings.append(f"{firmware} is missing from Resources\\{folder_name}")
-        resource_dir = os.path.join(RESOURCES_FOLDER, folder_name)
-        if not os.path.isdir(os.path.join(resource_dir, "tests")):
-            warnings.append(
-                f"Tests folder is missing from Resources\\{folder_name}; "
-                "the milestone would keep its own tests folder."
-            )
-
-        if product == "NCP":
-            has_agent = os.path.isdir(resource_dir) and any(
-                name.lower().endswith(".hex")
-                for name in os.listdir(resource_dir)
-            )
-            if not has_agent:
-                warnings.append(
-                    f"No test agent (*.hex) in Resources\\{folder_name}"
-                )
-        else:
-            has_agent = os.path.isdir(resource_dir) and any(
-                "test_agent" in name.lower()
-                and
-                name.lower().endswith(".rps")
-                for name in os.listdir(resource_dir)
-            )
-            if not has_agent:
-                warnings.append(
-                    f"No test agent (*test_agent*.rps) in Resources\\{folder_name}"
-                )
-        
-    if "SoC" in RESOURCE_LAYOUT:
-        import soc_secure
-        import soc_manifest_updater
-        plain_agents = soc_manifest_updater.plain_files()
-        if plain_agents:
-            unmatched = soc_manifest_updater.unmatched_markers(plain_agents)
-            if unmatched:
-                warnings.append(
-                    "SoC test agent not found for: " + ", ".join(unmatched)
-                    + " (those manifest entries keep the default agent)"
-                )
-        if not soc_secure.script_path():
-            warnings.append(f"SoC secure script was not found: {SOC_SECURE.get('script')}")
-        if not soc_secure.commander_folder():
-            warnings.append(
-                "SoC Commander folder was not found, so another commander is used. Newer commander "
-                "versions refuse to sign the firmware (set SOC_COMMANDER_FOLDER in wlan_runner.local.env)."
-            )
-        if not soc_secure.find_commander():
-            warnings.append("Simplicity Commander was not found for the SoC secure files (set SOC_COMMANDER_FOLDER in wlan_runner.local.env).")
-        for setup_name, secure_id in SOC_SECURE.get("setup_ids", {}).items():
-            absent = [
-                key for key in (f"ta_private_key_{secure_id}.pem", f"m4_private_key_{secure_id}.pem")
-                if not soc_secure.find_key(key)
-            ]
-            if absent:
-                warnings.append(f"SoC {setup_name}: signing key missing from SoC_Secure\\keys: {', '.join(absent)}")
+    for product in products:
+        warnings += product_findings(product)
 
     if not [item for item in EMAIL_SETTINGS.get("to", []) if str(item).strip()]:
         warnings.append("EMAIL_SETTINGS has no To recipients, so result mail cannot be sent.")
@@ -1044,6 +1062,7 @@ def select_product_and_setup():
     setup = setups[int(setup_choice) - 1]
     write_log(f"Product: {product}  Setup: {setup}")
     note_setup_warnings(setup)
+    note_product_warnings(product, setup)
     return product, setup
 
 
@@ -2647,7 +2666,9 @@ def main():
     checking = "--check" in sys.argv[1:]
     if checking:
         load_local_env()
-        errors, warnings = collect_config_findings()
+        asked = [arg for arg in sys.argv[1:] if arg.lower() in {name.lower() for name in RESOURCE_LAYOUT}]
+        products = [name for name in RESOURCE_LAYOUT if name.lower() in {arg.lower() for arg in asked}] or list(RESOURCE_LAYOUT)
+        errors, warnings = collect_config_findings(products)
         show_config_findings(errors, warnings)
         if errors:
             say(f"  {len(errors)} configuration error(s).", "red")

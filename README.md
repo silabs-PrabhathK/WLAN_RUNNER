@@ -12,7 +12,7 @@ pip install -r requirements.txt
 python wlan_runner.py
 ```
 
-- `python wlan_runner.py --check` prints configuration errors and warnings without starting a run.
+- `python wlan_runner.py --check` prints configuration errors and warnings without starting a run. Add `NCP` or `SoC` to check one product only.
 - `python _verify_flow.py` is a local self-check. It does not talk to a setup and it does not launch pytest.
 
 ## What you choose
@@ -48,7 +48,7 @@ Output\          created by the script, take what you need from here:
                      secure_files\  secure_*.rps firmware and test agents (SoC)
 ```
 
-`Resources` is never written to by the script, so it stays as clean as you left it. The firmware names that are expected come from `BUILD_CONFIG` (NCP) and `SOC_BUILD_CONFIG` (SoC) in `sanity_config.py`. `--check` and the startup warnings list what is missing.
+`Resources` is never written to by the script, so it stays as clean as you left it. The firmware names that are expected come from `BUILD_CONFIG` (NCP) and `SOC_BUILD_CONFIG` (SoC) in `sanity_config.py`. Missing files are listed per product: when you select a product and setup, only that product's warnings are shown (NCP: firmware, tests folder, `.hex` test agents. SoC: firmware, tests folder, test agents, and also the secure script, Commander and the signing keys of that setup). The startup check shows only the settings shared by both products (mail, Artifactory, Vault, plans).
 
 ## Preparing a setup
 
