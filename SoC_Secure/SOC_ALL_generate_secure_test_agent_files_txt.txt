@@ -1,0 +1,114 @@
+REM 8C-625
+commander rps convert secure_SiWG917-B.2.16.5.3.0.1_625.rps --app SiWG917-B.2.16.5.3.0.1.rps  --mic "7a4ff0b1e358ecbe33cc915feb76b84cb5f70e0c58ce3a54760d03acc1784d24" --encrypt "7a4ff0b1e358ecbe33cc915feb76b84cb5f70e0c58ce3a54760d03acc1784d24" --sign ta_private_key_625.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_625.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_2_brd4338a_test_agent_si91x_625.rps --app  aws_mem_config_2_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_625.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_azure_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  azure_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_twt_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  twt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_ipv6_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  ipv6_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_paho_mqtt_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  paho_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x_625.rps --app  lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x.rps --mic "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --encrypt "bd70a18aaead4fc96adff1f8f4aec5f29f43ab3f30d121afba623b76f27a1da7" --sign m4_private_key_625.pem
+
+REM 10C-056
+commander rps convert secure_SiWG917-B.2.16.5.3.0.1_056.rps --app SiWG917-B.2.16.5.3.0.1.rps  --mic "891c3b6739ce2f3b5661b7f86dc667d1f1421b2c0382bf2168e848e6b1ec5df9" --encrypt "891c3b6739ce2f3b5661b7f86dc667d1f1421b2c0382bf2168e848e6b1ec5df9" --sign ta_private_key_056.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_056.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_2_brd4338a_test_agent_si91x_056.rps --app  aws_mem_config_2_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_056.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_azure_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  azure_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_twt_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  twt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_ipv6_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  ipv6_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_paho_mqtt_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  paho_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x_056.rps --app  lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x.rps --mic "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --encrypt "b6a59d0778cc877b61abe008f27fe4a781411de726d1b222a510c8c32a67c11b" --sign m4_private_key_056.pem
+
+REM 10A-671
+commander rps convert secure_SiWG917-B.2.16.5.3.0.1_671.rps --app SiWG917-B.2.16.5.3.0.1.rps  --mic "3c011d6dd587a9ebc48d6a3bf549042a365e34ff26eaec6bdc1f02ec5a03b121" --encrypt "3c011d6dd587a9ebc48d6a3bf549042a365e34ff26eaec6bdc1f02ec5a03b121" --sign ta_private_key_671.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_671.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_2_brd4338a_test_agent_si91x_671.rps --app  aws_mem_config_2_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_671.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_azure_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  azure_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_twt_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  twt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_ipv6_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  ipv6_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_paho_mqtt_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  paho_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x_671.rps --app  lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x.rps --mic "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --encrypt "e3e051ad154cbef5e367352b1bcf87c8dc3c1205ccc45c71cb9bdd1761a2e0c1" --sign m4_private_key_671.pem
+
+REM 8B-845
+commander rps convert secure_SiWG917-B.2.16.5.3.0.1_845.rps --app SiWG917-B.2.16.5.3.0.1.rps  --mic "408691308c363940b341e2748360bb25ea6186310aabb3a236d284d6918cca08" --encrypt "408691308c363940b341e2748360bb25ea6186310aabb3a236d284d6918cca08" --sign ta_private_key_845.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_845.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_2_brd4338a_test_agent_si91x_845.rps --app  aws_mem_config_2_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_845.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_azure_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  azure_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_twt_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  twt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_ipv6_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  ipv6_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_paho_mqtt_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  paho_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x_845.rps --app  lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x.rps --mic "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --encrypt "9f19b2d2320c36ef339f0a38dcdca2071e08975730df42fba0c534127b6ea802" --sign m4_private_key_845.pem
+
+REM 9B-
+commander rps convert secure_SiWG917-B.2.16.5.3.0.1_215.rps --app SiWG917-B.2.16.5.3.0.1.rps  --mic "c2016220d2088702ae11811caf4de21a1da514789a8be6d68ab9f5fccba15b44" --encrypt "c2016220d2088702ae11811caf4de21a1da514789a8be6d68ab9f5fccba15b44" --sign ta_private_key_215.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_215.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_2_brd4338a_test_agent_si91x_215.rps --app  aws_mem_config_2_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_aws_mem_config_3_4k_brd4338a_test_agent_si91x_215.rps --app  aws_mem_config_3_4k_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_azure_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  azure_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_twt_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  twt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_ipv6_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  ipv6_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  host_lwip_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_paho_mqtt_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  paho_mqtt_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  lwip_mqtt_default_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem
+timeout /t 2
+commander rps convert secure_lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x_215.rps --app  lwip_mqtt_optimized_mem_config_3_brd4338a_test_agent_si91x.rps --mic "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --encrypt "2f027a5942f9779cdb4be9a56f2d0aa333a0e52114872e5cf18096be0f7722d4" --sign m4_private_key_215.pem

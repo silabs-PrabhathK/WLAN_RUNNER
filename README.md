@@ -32,7 +32,7 @@ The console's QuickEdit mode is switched off while the script runs, because a cl
 
 ## Resources layout
 
-Everything a product needs is kept inside this project, so it runs on any PC. These three folders are git-ignored (keys and generated files do not belong in git), so copy them by hand to a new PC.
+Everything a product needs is kept inside this project, so it runs on any PC. `SoC_Secure` is in the repository, so a new clone already has the secure script, Commander and the keys. `Resources` (tests, test agents, firmware) and `Output` (created files) are git-ignored, so you place the first one on each PC. **Keep this repository private: it holds the signing keys and the script with the MIC and encryption keys.**
 
 ```text
 Resources\NCP    you place: tests folder, "default" test agents, firmware .rps
