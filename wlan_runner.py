@@ -939,12 +939,28 @@ def collect_config_findings():
                 f"Tests folder is missing from Resources\\{folder_name}; "
                 "the milestone would keep its own tests folder."
             )
-        has_agent = os.path.isdir(resource_dir) and any(
-            "test_agent" in name.lower() and name.lower().endswith(".rps")
-            for name in os.listdir(resource_dir)
-        )
-        if not has_agent:
-            warnings.append(f"No test agent (*test_agent*.rps) in Resources\\{folder_name}")
+
+        if product == "NCP":
+            has_agent = os.path.isdir(resource_dir) and any(
+                name.lower().endswith(".hex")
+                for name in os.listdir(resource_dir)
+            )
+            if not has_agent:
+                warnings.append(
+                    f"No test agent (*.hex) in Resources\\{folder_name}"
+                )
+        else:
+            has_agent = os.path.isdir(resource_dir) and any(
+                "test_agent" in name.lower()
+                and
+                name.lower().endswith(".rps")
+                for name in os.listdir(resource_dir)
+            )
+            if not has_agent:
+                warnings.append(
+                    f"No test agent (*test_agent*.rps) in Resources\\{folder_name}"
+                )
+        
     if "SoC" in RESOURCE_LAYOUT:
         import soc_secure
         import soc_manifest_updater
