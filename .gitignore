@@ -2,7 +2,6 @@ __pycache__/
 *.pyc
 Logs/
 Reports/
-wlan_runner.local.env
 wlan_runner_workspace.path
 Resources/
 Output/
