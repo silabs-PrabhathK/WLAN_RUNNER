@@ -179,21 +179,31 @@ def with_write_firmware(text, options, files):
     return WRITE_FIRMWARE.sub(rf"\g<1>'{found}'", text, count=1), found
 
 
-def update_secure_text(text, secure_id):
-    """Default secure manifest -> setup secure manifest. Returns (text, notes)."""
+def update_secure_text(text, secure_id, files):
+    """Default secure manifest -> setup secure manifest. Returns (text, notes).
+
+    The secure_* anchors (the files the test loads) get the names of the secure
+    files soc_secure.py created, secure_<name>_<id>.rps, like the standard
+    manifest. The original anchors keep the plain firmware and test agent names."""
     notes = []
     latest = firmware_names("SoC")[0]
     agent = pick_file(plain_files(), AWS_AGENT)
+    secure_agent = pick_file(files, AWS_AGENT)
     if latest:
-        text = re.sub(r"(&secure_firmware_file_anchor\s+)\S+", rf"\g<1>encrypted_1_{latest}", text)
+        secure_latest = f"secure_{file_stem(latest)}_{secure_id}.rps"
+        text = re.sub(r"(&secure_firmware_file_anchor\s+)\S+", rf"\g<1>{secure_latest}", text)
         text = re.sub(r"(&firmware_file_anchor\s+)\S+", rf"\g<1>{latest}", text)
-        notes.append(f"Firmware -> {latest}")
-    if agent:
-        text = re.sub(r"(&secure_test_agent_file_anchor\s+)\S+", rf"\g<1>encrypted_1_{agent}", text)
-        text = re.sub(r"(&test_agent_file_anchor\s+)\S+", rf"\g<1>{agent}", text)
-        notes.append(f"Test agent -> {agent}")
+        notes.append(f"Firmware -> {secure_latest} (original {latest})")
+    if secure_agent:
+        text = re.sub(r"(&secure_test_agent_file_anchor\s+)\S+", rf"\g<1>{secure_agent}", text)
+        notes.append(f"Test agent -> {secure_agent}")
     else:
-        notes.append("WARNING test agent keeps the default (aws mem_config_3 file is not in Resources\\SoC)")
+        notes.append("WARNING secure test agent keeps the default (no secure aws mem_config_3 file)")
+    if agent:
+        text = re.sub(r"(&test_agent_file_anchor\s+)\S+", rf"\g<1>{agent}", text)
+        notes.append(f"Original test agent -> {agent}")
+    else:
+        notes.append("WARNING original test agent keeps the default (aws mem_config_3 file is not in Resources\\SoC)")
     text, count = re.subn(
         r"\b((?:m4_)?(?:ota_key|ta_private_key|m4_private_key))_1(\.(?:txt|pem))",
         rf"\g<1>_{secure_id}\g<2>",
@@ -256,7 +266,7 @@ def create_soc_manifests(workspace, milestone, setup):
     if secure_default is None:
         print(f"Skipped : {names[3]} ({SOC_DEFAULT_SECURE_MANIFEST} is not in the milestone)")
     else:
-        secure_text, secure_notes = update_secure_text(secure_default, secure_id)
+        secure_text, secure_notes = update_secure_text(secure_default, secure_id, files)
         write_manifest(folder, names[3], secure_text, secure_notes, SOC_DEFAULT_SECURE_MANIFEST)
         created.append(names[3])
 
